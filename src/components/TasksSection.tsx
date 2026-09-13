@@ -39,7 +39,6 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
   showToast,
 }) => {
   const [walletInput, setWalletInput] = useState('');
-  const [xHandleInput, setXHandleInput] = useState('');
   const [activeProofTaskId, setActiveProofTaskId] = useState<string | null>(null);
   const [proofInput, setProofInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -97,10 +96,9 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
 
     setIsSubmitting(true);
     try {
-      const success = await onSubmitApplication(trimmed, xHandleInput.trim() || undefined);
+      const success = await onSubmitApplication(trimmed);
       if (success) {
         setWalletInput('');
-        setXHandleInput('');
       }
     } finally {
       setIsSubmitting(false);
@@ -618,61 +616,42 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
 
               {/* Form Input Deck */}
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-                  
-                  {/* EVM Address Input */}
-                  <div className="lg:col-span-8 relative">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="0x71C...B29 (EVM Address)"
-                        value={walletInput}
-                        onChange={(e) => {
-                          setWalletInput(e.target.value);
-                          setWalletError('');
-                        }}
-                        disabled={!isAllRequiredDone || isSubmitting}
-                        className={`w-full px-4 py-3.5 rounded-2xl text-sm font-mono transition-all duration-200 bg-slate-950/90 border ${
-                          walletError
-                            ? 'border-rose-500 focus:border-rose-500 text-rose-400'
-                            : isWalletValid
-                            ? 'border-emerald-500/60 focus:border-emerald-500 text-white'
-                            : 'border-slate-700 focus:border-purple-500 text-white'
-                        } placeholder-slate-500 focus:outline-none disabled:bg-slate-950/40 disabled:border-slate-800 disabled:cursor-not-allowed`}
-                      />
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="0x71C...B29 (EVM Address)"
+                    value={walletInput}
+                    onChange={(e) => {
+                      setWalletInput(e.target.value);
+                      setWalletError('');
+                    }}
+                    disabled={!isAllRequiredDone || isSubmitting}
+                    className={`w-full px-4 py-3.5 pr-28 rounded-2xl text-sm font-mono transition-all duration-200 bg-slate-950/90 border ${
+                      walletError
+                        ? 'border-rose-500 focus:border-rose-500 text-rose-400'
+                        : isWalletValid
+                        ? 'border-emerald-500/60 focus:border-emerald-500 text-white'
+                        : 'border-slate-700 focus:border-purple-500 text-white'
+                    } placeholder-slate-500 focus:outline-none disabled:bg-slate-950/40 disabled:border-slate-800 disabled:cursor-not-allowed`}
+                  />
 
-                      {/* Paste Button Helper */}
-                      {isAllRequiredDone && !walletInput && (
-                        <button
-                          type="button"
-                          onClick={handlePasteAddress}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-purple-300 transition-colors cursor-pointer"
-                        >
-                          Paste
-                        </button>
-                      )}
+                  {/* Paste Button Helper */}
+                  {isAllRequiredDone && !walletInput && (
+                    <button
+                      type="button"
+                      onClick={handlePasteAddress}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-purple-300 transition-colors cursor-pointer"
+                    >
+                      Paste
+                    </button>
+                  )}
 
-                      {/* Valid EVM indicator check */}
-                      {isWalletValid && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1 text-xs font-mono">
-                          <Check className="w-4 h-4" /> Valid EVM
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Optional X / Discord Handle Input */}
-                  <div className="lg:col-span-4">
-                    <input
-                      type="text"
-                      placeholder="Your X Handle (e.g. @satoshi)"
-                      value={xHandleInput}
-                      onChange={(e) => setXHandleInput(e.target.value)}
-                      disabled={!isAllRequiredDone || isSubmitting}
-                      className="w-full px-4 py-3.5 rounded-2xl text-sm font-mono transition-all duration-200 bg-slate-950/90 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 disabled:bg-slate-950/40 disabled:border-slate-800 disabled:cursor-not-allowed"
-                    />
-                  </div>
-
+                  {/* Valid EVM indicator check */}
+                  {isWalletValid && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1 text-xs font-mono">
+                      <Check className="w-4 h-4" /> Valid EVM
+                    </span>
+                  )}
                 </div>
 
                 {walletError && (
