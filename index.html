@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <script>
+      (function() {
+        try {
+          var originalFetch = window.fetch;
+          var customFetch = originalFetch ? originalFetch.bind(window) : undefined;
+          var descriptor = {
+            configurable: true,
+            enumerable: true,
+            get: function() {
+              return customFetch;
+            },
+            set: function(fn) {
+              customFetch = fn;
+            }
+          };
+          try {
+            Object.defineProperty(window, 'fetch', descriptor);
+          } catch (_) {}
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            try {
+              Object.defineProperty(Window.prototype, 'fetch', descriptor);
+            } catch (_) {}
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BunInk — Official Inkonchain Mint</title>
+    <meta name="description" content="BunInk is a collection of unique digital bunnies on Inkonchain L2. Complete tasks, verify eligibility, and join the official mint whitelist." />
+    <meta property="og:title" content="BunInk — Official Inkonchain Mint" />
+    <meta property="og:description" content="BunInk is a collection of unique digital bunnies on Inkonchain L2. Complete tasks, verify eligibility, and join the official mint whitelist." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/png" href="/nft/179.png" />
+    <link rel="apple-touch-icon" href="/nft/179.png" />
+    <link rel="preload" as="image" href="/theme.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body class="bg-[#0B0F19] text-slate-100 antialiased selection:bg-purple-600 selection:text-white min-h-screen">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

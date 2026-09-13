@@ -1,0 +1,6 @@
+{
+  "name": "BunInk — Official Inkonchain Mint",
+  "description": "BunInk is a collection of unique digital bunnies on Inkonchain L2. Whitelist mint application, eligibility checker, and project roadmap.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

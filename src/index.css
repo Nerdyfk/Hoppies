@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+:root {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Cyber-Playful Headings & Display Elements */
+h1, h2, h3, h4, h5, h6, .font-display {
+  font-family: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: -0.025em;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar for modern sleek aesthetic */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* Inkonchain Floating & Ambient Logo Animations */
+@keyframes floatInkonchain1 {
+  0% {
+    transform: translate(0) rotate(0) scale(1);
+  }
+  33% {
+    transform: translate(45px, -50px) rotate(15deg) scale(1.08);
+  }
+  66% {
+    transform: translate(-30px, 35px) rotate(-10deg) scale(0.96);
+  }
+  100% {
+    transform: translate(0) rotate(0) scale(1);
+  }
+}
+
+@keyframes floatInkonchain2 {
+  0% {
+    transform: translate(0) rotate(0) scale(1);
+  }
+  33% {
+    transform: translate(-45px, 50px) rotate(-18deg) scale(0.94);
+  }
+  66% {
+    transform: translate(30px, -40px) rotate(12deg) scale(1.06);
+  }
+  100% {
+    transform: translate(0) rotate(0) scale(1);
+  }
+}
+
+@keyframes roadmap-glow-breathe {
+  0%, 100% {
+    opacity: 0.15;
+    filter: blur(20px);
+  }
+  50% {
+    opacity: 0.4;
+    filter: blur(28px);
+  }
+}
+
+.animate-inkonchain-float-1 {
+  animation: floatInkonchain1 16s ease-in-out infinite;
+}
+
+.animate-inkonchain-float-2 {
+  animation: floatInkonchain2 20s ease-in-out infinite;
+}
+
+.animate-roadmap-glow-breathe {
+  animation: roadmap-glow-breathe 4s ease-in-out infinite;
+}
+
+
