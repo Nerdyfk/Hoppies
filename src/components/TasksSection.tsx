@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { motion, useScroll, useTransform, AnimatePresence } from 'motion/react';
 import { Task, WhitelistApplication } from '../types.ts';
+import { triggerWhitelistConfetti } from '../utils/confetti.ts';
 
 interface TasksSectionProps {
   tasks: Task[];
@@ -99,6 +100,7 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
       const success = await onSubmitApplication(trimmed);
       if (success) {
         setWalletInput('');
+        triggerWhitelistConfetti();
       }
     } finally {
       setIsSubmitting(false);
