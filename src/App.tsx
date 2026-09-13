@@ -181,8 +181,8 @@ export default function App() {
       walletAddress: walletAddress,
       xHandle,
       submittedAt: new Date().toISOString(),
-      status: 'WHITELISTED',
-      tier: 'Tier 1 Guaranteed (Wave 1)',
+      status: 'PENDING',
+      tier: 'Wave 1 Priority (Pending Review)',
     };
 
     // Store in localStorage
@@ -193,9 +193,9 @@ export default function App() {
     const currentWallets = {
       ...INITIAL_WHITELISTED_WALLETS,
       [normalized]: {
-        status: 'WHITELISTED' as const,
-        tier: 'Tier 1 Guaranteed (Wave 1)',
-        allocation: '2 NFTs (Guaranteed Mint)',
+        status: 'PENDING' as const,
+        tier: 'Wave 1 Priority (Pending Review)',
+        allocation: 'Up to 2 NFTs (Subject to Review)',
       },
     };
     localStorage.setItem('bunink_wallets', JSON.stringify(currentWallets));
@@ -214,7 +214,7 @@ export default function App() {
       // Ignored since we persist locally
     }
 
-    showToast('success', 'Whitelist application submitted and approved! Check status in Step 2.');
+    showToast('info', 'Application submitted! Note: Submission does not guarantee a whitelist slot; spots are subject to review.');
     return true;
   };
 
@@ -228,8 +228,8 @@ export default function App() {
         found: true,
         status: application.status,
         wallet: application.walletAddress,
-        tier: application.tier || 'Wave 1 Priority Guaranteed',
-        allocation: '2 NFTs (Guaranteed Mint)',
+        tier: application.tier || 'Wave 1 Priority (Pending Review)',
+        allocation: application.status === 'WHITELISTED' ? '2 NFTs' : 'Up to 2 NFTs (Pending Review)',
         submittedAt: application.submittedAt,
       };
     }

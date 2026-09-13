@@ -59,7 +59,7 @@ export const ROADMAP_PHASES: RoadmapPhase[] = [
     description: 'Official genesis collection release on Inkonchain L2 with low transaction fees.',
     items: [
       'Public & Whitelist mint on Inkonchain L2 with near-zero gas fees',
-      'Guaranteed whitelist priority window for approved applicants',
+      'Priority whitelist window for approved applicants (2,222 Total Supply)',
       'Instant task proof verification & transparent whitelist allocation',
       'Real-time live mint tracker & verified secondary marketplace listings',
     ],

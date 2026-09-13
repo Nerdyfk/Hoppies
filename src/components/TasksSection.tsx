@@ -176,8 +176,16 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
               </h2>
 
               <p className="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
-                Complete the official community verification quests below, submit your proof, and secure your cryptographic mint allocation on <span className="text-purple-300 font-semibold">Inkonchain L2</span>.
+                Complete the official community verification quests below, submit your proof, and submit your Inkonchain EVM address to apply for whitelist priority. Total collection supply is strictly limited to <span className="text-purple-300 font-semibold">2,222</span> NFTs.
               </p>
+
+              {/* Explicit Non-Guaranteed Disclaimer Banner */}
+              <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs max-w-2xl">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  <strong className="text-amber-300">Important:</strong> Application submission does <span className="underline font-bold">not guarantee</span> a whitelist slot of the mint. Spots are allocated based on authentic task verification, anti-bot filtering, and snapshot review.
+                </p>
+              </div>
             </div>
 
             {/* VIP Allocation Progress Card */}
@@ -210,7 +218,7 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
               <div className="flex items-center justify-between text-[11px] font-medium mt-3 text-slate-400">
                 {isAllRequiredDone ? (
                   <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Whitelist Unlocked
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Quests Verified
                   </span>
                 ) : (
                   <span className="text-amber-400 flex items-center gap-1">
@@ -218,7 +226,7 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                   </span>
                 )}
                 <span className="font-mono text-purple-300">
-                  Tier: {isAllRequiredDone ? 'Guaranteed' : 'Pending'}
+                  Tier: {isAllRequiredDone ? 'Application Ready' : 'Pending Quests'}
                 </span>
               </div>
             </div>
@@ -231,8 +239,8 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                 <Award className="w-4 h-4" />
               </div>
               <div>
-                <p className="text-white font-semibold">Guaranteed Mint</p>
-                <p className="text-slate-400 text-[11px]">Up to 2 NFTs per verified wallet</p>
+                <p className="text-white font-semibold">Priority Allocation</p>
+                <p className="text-slate-400 text-[11px]">Up to 2 NFTs per approved wallet</p>
               </div>
             </div>
 
@@ -492,30 +500,38 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-purple-500/20">
                   <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-purple-950/50">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-950/50">
                       <ShieldCheck className="w-6 h-6" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="text-lg sm:text-xl font-extrabold text-white font-display">
-                          Official Whitelist Pass
+                          Whitelist Application Card
                         </h3>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          {application.status}
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          {application.status === 'WHITELISTED' ? 'WHITELISTED' : 'UNDER REVIEW'}
                         </span>
                       </div>
                       <p className="text-xs text-slate-400">
-                        Cryptographically recorded for the BunInk Genesis Mint on Inkonchain L2
+                        Application submitted for the BunInk 2,222 Genesis Collection on Inkonchain L2
                       </p>
                     </div>
                   </div>
 
                   <div className="text-left sm:text-right font-mono">
-                    <span className="text-[11px] text-slate-400 block uppercase">Allocation Tier</span>
+                    <span className="text-[11px] text-slate-400 block uppercase">Application Tier</span>
                     <span className="text-sm font-bold text-purple-300">
-                      {application.tier || 'Wave 1 Priority Guaranteed'}
+                      {application.tier || 'Wave 1 Priority Candidate (Under Review)'}
                     </span>
                   </div>
+                </div>
+
+                {/* Important Non-Guaranteed Disclaimer in Pass */}
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="leading-relaxed">
+                    <strong className="text-amber-300">Notice:</strong> Application submission does <span className="underline font-bold">not guarantee</span> a whitelist slot of the mint. All submissions undergo proof review and anti-bot verification before final snapshot spots are awarded.
+                  </p>
                 </div>
 
                 {/* Wallet Details Display Card */}
@@ -523,7 +539,7 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                   
                   <div className="md:col-span-2 p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
                     <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-mono">Registered Inkonchain Address</span>
+                      <span className="font-mono">Submitted Inkonchain Address</span>
                       <button
                         onClick={handleCopyPassAddress}
                         className="text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors cursor-pointer text-[11px]"
@@ -547,12 +563,12 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                   </div>
 
                   <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                    <span className="text-xs text-slate-400 font-mono block">Guaranteed Allocation</span>
-                    <p className="text-base font-bold text-emerald-400 font-mono">
-                      2 NFTs / Wallet
+                    <span className="text-xs text-slate-400 font-mono block">Max Potential Mint</span>
+                    <p className="text-base font-bold text-purple-300 font-mono">
+                      Up to 2 NFTs
                     </p>
-                    <span className="text-[10px] text-slate-500 font-mono block">
-                      Submitted: {new Date(application.submittedAt).toLocaleDateString()}
+                    <span className="text-[10px] text-slate-400 font-mono block">
+                      Status: Pending Audit
                     </span>
                   </div>
 
@@ -561,15 +577,15 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                 {/* Pass Footer Links */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-slate-400">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Eligible for automatic snapshot verification in smart contract</span>
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span>Queued for snapshot verification. Check eligibility below periodically.</span>
                   </div>
 
                   <a
                     href="#check-eligibility"
                     className="text-purple-300 hover:text-white font-semibold flex items-center gap-1 transition-colors self-start sm:self-auto"
                   >
-                    <span>Verify in Public Checker</span>
+                    <span>Check Whitelist Status</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </a>
                 </div>
@@ -596,14 +612,14 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                       </span>
                     ) : (
                       <span className="px-2.5 py-0.5 text-[10px] font-semibold uppercase rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                        <Unlock className="w-3 h-3" /> Ready To Submit
+                        <Unlock className="w-3 h-3" /> Ready To Apply
                       </span>
                     )}
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-300 mt-1">
                     {isAllRequiredDone
-                      ? 'All quests verified! Enter your EVM address (0x...) to lock in your official Wave 1 whitelist reservation.'
+                      ? 'All quests verified! Enter your EVM address (0x...) to submit your application. Note: Application submission does not guarantee a whitelist slot.'
                       : 'Complete and verify all required community quests above to unlock EVM address registration.'}
                   </p>
                 </div>
@@ -661,11 +677,11 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                   </p>
                 )}
 
-                {/* Submit Button */}
+                {/* Submit Button & Non-guaranteed note */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
                   <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <ShieldCheck className="w-4 h-4 text-purple-400" />
-                    <span>Zero gas signature required for submission. Anti-bot protected.</span>
+                    <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Submission does not guarantee a slot. Verified against bot attacks.</span>
                   </div>
 
                   <button
@@ -676,12 +692,12 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
                         <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                        <span>Confirming Allocation...</span>
+                        <span>Submitting Application...</span>
                       </span>
                     ) : (
                       <>
                         <Sparkles className="w-4 h-4" />
-                        <span>Lock In Whitelist Allocation</span>
+                        <span>Submit Whitelist Application</span>
                       </>
                     )}
                   </button>

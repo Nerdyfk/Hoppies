@@ -80,7 +80,7 @@ export const Hero: React.FC<HeroProps> = ({ onJoinClick }) => {
             <div className="pt-4 grid grid-cols-3 gap-3 max-w-lg mx-auto lg:mx-0 text-left">
               <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
                 <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Supply</p>
-                <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-mono mt-0.5">10,000</p>
+                <p className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-mono mt-0.5">2,222</p>
               </div>
               <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
                 <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Traits</p>

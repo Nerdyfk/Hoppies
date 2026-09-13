@@ -228,12 +228,12 @@ export const EligibilityChecker: React.FC<EligibilityCheckerProps> = ({
                   </div>
 
                   <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-amber-500 text-white self-start sm:self-auto">
-                    Pending
+                    Under Review
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                  Your wallet is queued for snapshot confirmation. Whitelist spots are verified and synced in batches. Please re-check periodically.
+                  Your wallet is queued for snapshot confirmation. <span className="font-semibold text-slate-800 dark:text-slate-200">Please note:</span> application submission does <span className="underline font-semibold">not guarantee</span> a whitelist slot of the mint due to the strict 2,222 total supply limit. Spots are confirmed once proofs are audited.
                 </p>
               </div>
             ) : (
