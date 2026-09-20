@@ -3,7 +3,6 @@ import { Navbar } from './components/Navbar.tsx';
 import { Hero } from './components/Hero.tsx';
 import { TasksSection } from './components/TasksSection.tsx';
 import { EligibilityChecker } from './components/EligibilityChecker.tsx';
-import { RoadmapSection } from './components/RoadmapSection.tsx';
 import { Footer } from './components/Footer.tsx';
 import { Toast } from './components/Toast.tsx';
 import { Task, WhitelistApplication, WhitelistCheckResponse, ToastMessage } from './types.ts';
@@ -62,16 +61,11 @@ export default function App() {
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // Sync dark mode class on documentElement
+  // Ensure clean cream theme on documentElement
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('bunink_theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('bunink_theme', 'light');
-    }
-  }, [darkMode]);
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem('bunink_theme', 'cream');
+  }, []);
 
   // Dynamically change document.title based on user progress or application status
   useEffect(() => {
@@ -290,34 +284,34 @@ export default function App() {
   };
 
   return (
-    <div className="relative min-h-screen bg-slate-50 dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100 transition-colors duration-200 flex flex-col justify-between overflow-x-hidden">
+    <div className="relative min-h-screen bg-[#FEF3C7] text-slate-900 transition-colors duration-200 flex flex-col justify-between overflow-x-hidden">
       {/* Existing Animated Background Theme with INKON chain logo */}
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
-        {/* Soft atmospheric gradient orbs */}
-        <div className="absolute top-[10%] right-[5%] w-[600px] h-[600px] bg-gradient-to-br from-[#7B3FE4]/25 via-purple-600/15 to-transparent blur-[150px] rounded-full pointer-events-none" />
-        <div className="absolute top-[-5%] left-[-5%] w-[650px] h-[650px] bg-gradient-to-br from-[#6D28D9]/25 via-[#7B3FE4]/15 to-transparent blur-[150px] rounded-full pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[750px] h-[750px] bg-gradient-to-tl from-[#7B3FE4]/20 via-[#00D2FF]/10 to-transparent blur-[160px] rounded-full pointer-events-none" />
+        {/* Soft atmospheric gradient orbs tailored for cream background */}
+        <div className="absolute top-[10%] right-[5%] w-[600px] h-[600px] bg-gradient-to-br from-amber-300/30 via-purple-300/15 to-transparent blur-[150px] rounded-full pointer-events-none" />
+        <div className="absolute top-[-5%] left-[-5%] w-[650px] h-[650px] bg-gradient-to-br from-yellow-300/30 via-amber-200/25 to-transparent blur-[150px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[750px] h-[750px] bg-gradient-to-tl from-amber-300/20 via-purple-300/15 to-transparent blur-[160px] rounded-full pointer-events-none" />
 
         {/* Floating Inkonchain Theme Logo 1 (Top Left) */}
-        <div className="absolute top-[5%] left-[2%] w-60 h-60 sm:w-80 sm:h-80 md:w-[420px] md:h-[420px] opacity-15 dark:opacity-40 animate-inkonchain-float-1 transform -rotate-12 pointer-events-none">
+        <div className="absolute top-[5%] left-[2%] w-60 h-60 sm:w-80 sm:h-80 md:w-[420px] md:h-[420px] opacity-20 animate-inkonchain-float-1 transform -rotate-12 pointer-events-none">
           <img
             src="/theme.png"
             alt="Inkonchain Theme Logo"
-            className="w-full h-full object-contain filter drop-shadow-[0_0_30px_rgba(123,63,228,0.3)] dark:drop-shadow-[0_0_50px_rgba(123,63,228,0.6)]"
+            className="w-full h-full object-contain filter drop-shadow-[0_0_30px_rgba(123,63,228,0.2)]"
           />
         </div>
 
         {/* Floating Inkonchain Theme Logo 2 (Bottom Right) */}
-        <div className="absolute bottom-[6%] right-[3%] w-64 h-64 sm:w-88 sm:h-88 md:w-[460px] md:h-[460px] opacity-15 dark:opacity-40 animate-inkonchain-float-2 transform rotate-12 pointer-events-none">
+        <div className="absolute bottom-[6%] right-[3%] w-64 h-64 sm:w-88 sm:h-88 md:w-[460px] md:h-[460px] opacity-20 animate-inkonchain-float-2 transform rotate-12 pointer-events-none">
           <img
             src="/theme.png"
             alt="Inkonchain Theme Logo"
-            className="w-full h-full object-contain filter drop-shadow-[0_0_35px_rgba(168,85,247,0.3)] dark:drop-shadow-[0_0_55px_rgba(168,85,247,0.6)]"
+            className="w-full h-full object-contain filter drop-shadow-[0_0_35px_rgba(168,85,247,0.2)]"
           />
         </div>
 
         {/* Ambient Center Subtle Inkonchain Glow */}
-        <div className="hidden lg:block absolute top-[45%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-96 h-96 opacity-5 dark:opacity-15 animate-roadmap-glow-breathe pointer-events-none">
+        <div className="hidden lg:block absolute top-[45%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-96 h-96 opacity-10 animate-ambient-glow-breathe pointer-events-none">
           <img
             src="/theme.png"
             alt="Inkonchain Ambient Logo"
@@ -358,8 +352,7 @@ export default function App() {
           showToast={showToast}
         />
 
-        {/* Project Roadmap Section */}
-        <RoadmapSection />
+
       </main>
 
       {/* Footer */}

@@ -9,11 +9,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onJoinWhitelistClick,
 }) => {
   return (
-    <header className="sticky top-0 z-40 w-full bg-slate-900/80 dark:bg-[#0B0F19]/85 backdrop-blur-md border-b border-slate-200/20 dark:border-slate-800 transition-colors duration-200">
+    <header className="sticky top-0 z-40 w-full bg-[#FEF3C7]/90 backdrop-blur-md border-b border-amber-300/80 transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
         {/* Logo & Brand */}
         <a href="/" className="flex items-center gap-3 group focus:outline-none">
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-purple-600/20 border border-purple-500/40 p-0.5 overflow-hidden group-hover:scale-105 transition-transform shrink-0 flex items-center justify-center">
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-200/60 border border-amber-300/80 p-0.5 overflow-hidden group-hover:scale-105 transition-transform shrink-0 flex items-center justify-center shadow-xs">
             <img
               src="/nft/179.png"
               alt="BunInk Genesis"
@@ -22,48 +22,40 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
-              <span className="text-xl sm:text-2xl font-bold tracking-tight text-white font-display">
+              <span className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 font-display">
                 BunInk
               </span>
-              <span className="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                L2 Mint
-              </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Inkonchain Network</span>
             </div>
           </div>
         </a>
 
         {/* Navigation items */}
-        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
+        <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-700">
           <a
             href="#tasks"
-            className="hover:text-white transition-colors duration-150 py-1"
+            className="hover:text-purple-700 transition-colors duration-150 py-1"
           >
-            Whitelist Tasks
+            Whitelist Quests
           </a>
           <a
             href="#check-eligibility"
-            className="hover:text-white transition-colors duration-150 py-1"
+            className="hover:text-purple-700 transition-colors duration-150 py-1"
           >
             Eligibility Checker
           </a>
-          <a
-            href="#roadmap"
-            className="hover:text-white transition-colors duration-150 py-1"
-          >
-            Roadmap
-          </a>
+
           <a
             href="https://explorer.inkonchain.com"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1 hover:text-purple-400 transition-colors duration-150 py-1"
+            className="flex items-center gap-1 hover:text-purple-700 transition-colors duration-150 py-1"
           >
             <span>Explorer</span>
-            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+            <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
           </a>
         </nav>
 
@@ -74,7 +66,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             href="https://x.com/Bunnink0"
             target="_blank"
             rel="noreferrer"
-            className="p-2 sm:p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl border border-amber-300/80 bg-amber-50/80 hover:bg-white text-slate-800 hover:text-black transition-colors shadow-xs"
             title="Follow @Bunnink0 on X"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current" aria-hidden="true">

@@ -1,24 +1,5 @@
-import React, { useState, useRef } from 'react';
-import {
-  CheckCircle2,
-  ExternalLink,
-  Lock,
-  Unlock,
-  Sparkles,
-  ShieldCheck,
-  AlertCircle,
-  Edit2,
-  Copy,
-  Check,
-  Zap,
-  Ticket,
-  Award,
-  ArrowRight,
-  Flame,
-  Globe,
-  HelpCircle,
-} from 'lucide-react';
-import { motion, useScroll, useTransform, AnimatePresence } from 'motion/react';
+import React, { useState, useEffect } from 'react';
+import { Wallet, Check, CheckCircle2, Copy, AlertCircle } from 'lucide-react';
 import { Task, WhitelistApplication } from '../types.ts';
 import { triggerWhitelistConfetti } from '../utils/confetti.ts';
 
@@ -34,74 +15,86 @@ interface TasksSectionProps {
 export const TasksSection: React.FC<TasksSectionProps> = ({
   tasks,
   onCompleteTask,
-  onResetTask,
   onSubmitApplication,
   application,
   showToast,
 }) => {
-  const [walletInput, setWalletInput] = useState('');
-  const [activeProofTaskId, setActiveProofTaskId] = useState<string | null>(null);
-  const [proofInput, setProofInput] = useState('');
+  const task1 = tasks[0];
+  const task2 = tasks[1];
+
+  const [followProof, setFollowProof] = useState(task1?.userProof || '');
+  const [commentProof, setCommentProof] = useState(task2?.userProof || '');
+  const [walletInput, setWalletInput] = useState(application?.walletAddress || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [walletError, setWalletError] = useState('');
   const [copiedPass, setCopiedPass] = useState(false);
+  const [errors, setErrors] = useState<{ follow?: string; comment?: string; wallet?: string }>({});
 
-  const totalTasks = tasks.length;
-  const completedCount = tasks.filter((t) => t.isCompleted).length;
-  const isAllRequiredDone = tasks.filter((t) => t.required).every((t) => t.isCompleted);
-  const progressPercentage = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
-
-  const handleOpenProofModal = (task: Task) => {
-    setActiveProofTaskId(task.id);
-    setProofInput(task.userProof || '');
-  };
-
-  const handleSaveProof = (taskId: string) => {
-    const trimmed = proofInput.trim();
-    if (!trimmed) {
-      showToast('warning', 'Please enter your X handle (@username) or tweet link as verification proof.');
-      return;
+  // Synchronize inputs if external tasks or application change
+  useEffect(() => {
+    if (task1?.userProof && !followProof) {
+      setFollowProof(task1.userProof);
     }
-    onCompleteTask(taskId, trimmed);
-    setActiveProofTaskId(null);
-    setProofInput('');
-    showToast('success', 'Quest proof verified and stored!');
-  };
+  }, [task1?.userProof]);
+
+  useEffect(() => {
+    if (task2?.userProof && !commentProof) {
+      setCommentProof(task2.userProof);
+    }
+  }, [task2?.userProof]);
+
+  useEffect(() => {
+    if (application?.walletAddress && !walletInput) {
+      setWalletInput(application.walletAddress);
+    }
+  }, [application?.walletAddress]);
 
   const validateAddress = (addr: string): boolean => {
     const evmRegex = /^0x[a-fA-F0-9]{40}$/;
     return evmRegex.test(addr.trim());
   };
 
-  const isWalletValid = validateAddress(walletInput);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setWalletError('');
+    const newErrors: { follow?: string; comment?: string; wallet?: string } = {};
 
-    if (!isAllRequiredDone) {
-      showToast('warning', 'Please complete and confirm proof for all required quests first.');
-      return;
+    const cleanFollow = followProof.trim();
+    const cleanComment = commentProof.trim();
+    const cleanWallet = walletInput.trim();
+
+    if (!cleanFollow) {
+      newErrors.follow = 'Please enter your username or profile link';
     }
 
-    const trimmed = walletInput.trim();
-    if (!trimmed) {
-      setWalletError('Please enter your EVM wallet address');
-      return;
+    if (!cleanComment) {
+      newErrors.comment = 'Please enter your comment or status link';
     }
 
-    if (!validateAddress(trimmed)) {
-      setWalletError('Invalid EVM address format. Must begin with 0x followed by 40 hex characters.');
+    if (!cleanWallet) {
+      newErrors.wallet = 'Please enter your EVM wallet address';
+    } else if (!validateAddress(cleanWallet)) {
+      newErrors.wallet = 'Invalid EVM address (must be 0x followed by 40 hex characters)';
+    }
+
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length > 0) {
+      showToast('warning', 'Please complete all required quest fields properly.');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const success = await onSubmitApplication(trimmed);
+      // Save proofs to tasks
+      if (task1) onCompleteTask(task1.id, cleanFollow);
+      if (task2) onCompleteTask(task2.id, cleanComment);
+
+      const success = await onSubmitApplication(cleanWallet, cleanFollow);
       if (success) {
-        setWalletInput('');
         triggerWhitelistConfetti();
+        showToast('success', 'Whitelist application submitted successfully!');
       }
+    } catch {
+      showToast('error', 'Failed to submit application. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -115,604 +108,249 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
     setTimeout(() => setCopiedPass(false), 2000);
   };
 
-  const handlePasteAddress = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) {
-        setWalletInput(text.trim());
-        setWalletError('');
-      }
-    } catch {
-      showToast('info', 'Please paste your wallet address directly into the field.');
-    }
-  };
-
-  const sectionRef = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ['start end', 'end start'],
-  });
-
-  const yCard = useTransform(scrollYProgress, [0, 1], [20, -20]);
-  const yGlow = useTransform(scrollYProgress, [0, 1], [-25, 35]);
-
   return (
-    <section ref={sectionRef} id="tasks" className="relative scroll-mt-24 space-y-8">
-      {/* Radiant Background Glows */}
-      <motion.div
-        style={{ y: yGlow }}
-        className="absolute -top-24 -right-16 w-96 h-96 bg-gradient-to-br from-purple-600/20 via-[#7B3FE4]/15 to-transparent rounded-full blur-[120px] pointer-events-none -z-10"
-      />
-      <motion.div
-        style={{ y: yGlow }}
-        className="absolute -bottom-20 -left-16 w-80 h-80 bg-gradient-to-tr from-emerald-500/15 via-purple-600/10 to-transparent rounded-full blur-[100px] pointer-events-none -z-10"
-      />
+    <section id="tasks" className="relative scroll-mt-24 py-6">
+      <div className="max-w-2xl mx-auto">
+        {/* Retro Header */}
+        <h2 className="font-pixel text-[#181d27] text-sm sm:text-base lg:text-lg tracking-wider mb-6 select-none">
+          WHITELIST QUESTS
+        </h2>
 
-      <motion.div
-        style={{ y: yCard }}
-        className="relative rounded-3xl bg-slate-900/90 dark:bg-[#0E1322]/95 border border-purple-500/20 dark:border-purple-500/25 p-6 sm:p-10 shadow-2xl shadow-purple-950/40 backdrop-blur-xl overflow-hidden"
-      >
-        {/* Top Holographic Edge Accent */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-600 via-pink-500 via-purple-400 to-emerald-400" />
-
-        {/* Header Section with VIP Status Badge & Perks */}
-        <div className="space-y-6 pb-8 border-b border-slate-800">
-          
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-3">
-              {/* Live Badge Strip */}
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-purple-500/15 text-purple-300 border border-purple-500/30">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span>Step 01 • Genesis Whitelist</span>
-                </div>
-
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  <Zap className="w-3 h-3 text-emerald-400" />
-                  <span>Wave 1: High Priority (80% Claimed)</span>
-                </div>
-              </div>
-
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight font-display">
-                Whitelist Access Portal
-              </h2>
-
-              <p className="text-sm sm:text-base text-slate-300 max-w-2xl leading-relaxed">
-                Complete the official community verification quests below, submit your proof, and submit your Inkonchain EVM address to apply for whitelist priority. Total collection supply is strictly limited to <span className="text-purple-300 font-semibold">2,222</span> NFTs.
-              </p>
-
-              {/* Explicit Non-Guaranteed Disclaimer Banner */}
-              <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs max-w-2xl">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <strong className="text-amber-300">Important:</strong> Application submission does <span className="underline font-bold">not guarantee</span> a whitelist slot of the mint. Spots are allocated based on authentic task verification, anti-bot filtering, and snapshot review.
-                </p>
-              </div>
-            </div>
-
-            {/* VIP Allocation Progress Card */}
-            <div className="p-5 rounded-2xl bg-gradient-to-b from-purple-950/30 to-slate-900/90 border border-purple-500/30 shrink-0 min-w-[280px] sm:min-w-[320px] shadow-lg shadow-purple-950/20">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-300 mb-2.5">
-                <span className="flex items-center gap-1.5 text-purple-300">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  <span>Quest Verification</span>
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-sm text-white">
-                    {completedCount} <span className="text-slate-500 font-normal">/ {totalTasks}</span>
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40 font-mono">
-                    {progressPercentage}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden p-0.5">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-purple-500 via-pink-500 to-emerald-400 rounded-full"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progressPercentage}%` }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] font-medium mt-3 text-slate-400">
-                {isAllRequiredDone ? (
-                  <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Quests Verified
-                  </span>
-                ) : (
-                  <span className="text-amber-400 flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> {totalTasks - completedCount} Quests Remaining
-                  </span>
-                )}
-                <span className="font-mono text-purple-300">
-                  Tier: {isAllRequiredDone ? 'Application Ready' : 'Pending Quests'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Guaranteed Perks Ribbon */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-xs">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0">
-                <Award className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-white font-semibold">Priority Allocation</p>
-                <p className="text-slate-400 text-[11px]">Up to 2 NFTs per approved wallet</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-xs">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <Zap className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-white font-semibold">Sub-Cent Gas Fees</p>
-                <p className="text-slate-400 text-[11px]">Powered by Inkonchain L2 network</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-xs">
-              <div className="w-8 h-8 rounded-lg bg-pink-500/15 border border-pink-500/30 flex items-center justify-center text-pink-300 shrink-0">
-                <Ticket className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-white font-semibold">24H Early Access</p>
-                <p className="text-slate-400 text-[11px]">Priority window before public sale</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 text-xs">
-              <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                <Flame className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-white font-semibold">$BINK Token Airdrop</p>
-                <p className="text-slate-400 text-[11px]">Future retroactive loyalty points</p>
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        {/* Quests Container */}
-        <div className="space-y-4 pt-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-widest font-mono text-purple-400">
-                REQUIRED QUESTS
-              </span>
-              <span className="text-xs text-slate-400 font-mono">
-                ({completedCount} of {totalTasks} Verified)
-              </span>
-            </div>
-            <span className="text-xs text-slate-400 font-mono hidden sm:inline-block">
-              Click "Verify Proof" after completing on X
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            {tasks.map((task, index) => {
-              const isOpen = activeProofTaskId === task.id;
-
-              return (
-                <div
-                  key={task.id}
-                  className={`group relative rounded-2xl border transition-all duration-300 overflow-hidden ${
-                    task.isCompleted
-                      ? 'bg-gradient-to-r from-emerald-950/20 via-slate-900/80 to-slate-900/90 border-emerald-500/40 shadow-sm'
-                      : 'bg-slate-900/70 border-slate-800 hover:border-purple-500/40 hover:bg-slate-900/90'
-                  }`}
-                >
-                  <div className="p-5 sm:p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      
-                      {/* Quest Details */}
-                      <div className="flex items-start gap-4">
-                        {/* Status Icon Orb */}
-                        <div
-                          className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all ${
-                            task.isCompleted
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
-                              : 'bg-slate-800 text-purple-400 border border-slate-700 group-hover:border-purple-500/40'
-                          }`}
-                        >
-                          {task.isCompleted ? (
-                            <CheckCircle2 className="w-6 h-6 text-emerald-400" />
-                          ) : (
-                            <span className="font-mono font-bold text-sm">
-                              0{index + 1}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[10px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-                              Quest 0{index + 1}
-                            </span>
-
-                            {task.required && (
-                              <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                                Required
-                              </span>
-                            )}
-
-                            {task.isCompleted ? (
-                              <span className="px-2.5 py-0.5 text-[10px] font-bold uppercase rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 font-mono">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Proof Stored
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 text-[10px] font-medium rounded bg-slate-800 text-slate-400 font-mono">
-                                +100 WL XP
-                              </span>
-                            )}
-                          </div>
-
-                          <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                            {task.title}
-                          </h3>
-
-                          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-2xl">
-                            {task.description}
-                          </p>
-
-                          {task.userProof && (
-                            <div className="pt-1 flex items-center gap-2 text-xs">
-                              <span className="text-slate-400 font-mono">Stored Proof:</span>
-                              <span className="px-2 py-0.5 rounded bg-purple-950/60 border border-purple-500/30 text-purple-300 font-mono break-all">
-                                {task.userProof}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Quest Action Buttons */}
-                      <div className="flex items-center gap-2.5 sm:self-center shrink-0 pt-2 sm:pt-0">
-                        <a
-                          href={task.action_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white transition-all border border-slate-700 flex items-center gap-1.5 cursor-pointer shadow-sm"
-                        >
-                          <span>Open on X</span>
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-                        </a>
-
-                        {task.isCompleted ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleOpenProofModal(task)}
-                              className="px-3 py-2 rounded-xl text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-purple-300 transition-all flex items-center gap-1.5 cursor-pointer"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                              <span>Edit Proof</span>
-                            </button>
-                            {onResetTask && (
-                              <button
-                                type="button"
-                                onClick={() => onResetTask(task.id)}
-                                className="px-2.5 py-2 rounded-xl text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                                title="Reset proof"
-                              >
-                                Clear
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => handleOpenProofModal(task)}
-                            className="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-950/40 transition-all cursor-pointer flex items-center gap-1.5"
-                          >
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>Verify Proof</span>
-                          </button>
-                        )}
-                      </div>
-
-                    </div>
-
-                    {/* Integrated Smooth Proof Verification Drawer */}
-                    <AnimatePresence>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.25 }}
-                          className="mt-4 pt-4 border-t border-slate-800"
-                        >
-                          <div className="p-4 rounded-xl bg-slate-950/80 border border-purple-500/30 space-y-3">
-                            <div className="flex items-center justify-between text-xs text-slate-300">
-                              <span className="font-semibold text-purple-300 flex items-center gap-1.5">
-                                <Sparkles className="w-3.5 h-3.5" />
-                                Submit Verification Proof for Quest 0{index + 1}
-                              </span>
-                              <span className="text-slate-400 font-mono text-[11px]">
-                                Instant validation
-                              </span>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row gap-2">
-                              <input
-                                type="text"
-                                placeholder="Enter your X handle (e.g. @yourhandle) or tweet link..."
-                                value={proofInput}
-                                onChange={(e) => setProofInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleSaveProof(task.id);
-                                  } else if (e.key === 'Escape') {
-                                    setActiveProofTaskId(null);
-                                  }
-                                }}
-                                className="flex-1 px-4 py-2.5 rounded-xl text-xs bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 font-mono"
-                                autoFocus
-                              />
-
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleSaveProof(task.id)}
-                                  disabled={!proofInput.trim()}
-                                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-all shadow-md cursor-pointer flex items-center gap-1.5 shrink-0"
-                                >
-                                  <Check className="w-3.5 h-3.5" />
-                                  <span>Confirm Proof</span>
-                                </button>
-                                <button
-                                  onClick={() => setActiveProofTaskId(null)}
-                                  className="px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white transition-colors"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-
-                            <p className="text-[11px] text-slate-400">
-                              Tip: You can provide your Twitter/X username handle or direct link to your retweet/post.
-                            </p>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
+        {application ? (
+          /* Application Submitted Success State */
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-[#131722] border border-[#222836] p-6 sm:p-7 shadow-xl shadow-black/40 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#222836]">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-xl bg-[#1b2130] border border-[#2c354a] flex items-center justify-center shrink-0 text-emerald-400">
+                    <CheckCircle2 className="w-6 h-6" />
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Step 2: Final EVM Address Submission or Verified Pass */}
-        <div className="mt-10 pt-8 border-t border-slate-800">
-          
-          {application ? (
-            /* PRESTIGE DIGITAL WHITELIST PASS */
-            <div className="relative rounded-2xl bg-gradient-to-br from-slate-950 via-purple-950/40 to-slate-950 border border-purple-500/40 p-6 sm:p-8 shadow-2xl overflow-hidden">
-              {/* Holographic Watermark Pattern */}
-              <div className="absolute -right-12 -bottom-12 w-64 h-64 bg-purple-500/10 rounded-full blur-[70px] pointer-events-none" />
-              
-              <div className="relative space-y-6">
-                
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-purple-500/20">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-950/50">
-                      <ShieldCheck className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-lg sm:text-xl font-extrabold text-white font-display">
-                          Whitelist Application Card
-                        </h3>
-                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                          {application.status === 'WHITELISTED' ? 'WHITELISTED' : 'UNDER REVIEW'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400">
-                        Application submitted for the BunInk 2,222 Genesis Collection on Inkonchain L2
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-left sm:text-right font-mono">
-                    <span className="text-[11px] text-slate-400 block uppercase">Application Tier</span>
-                    <span className="text-sm font-bold text-purple-300">
-                      {application.tier || 'Wave 1 Priority Candidate (Under Review)'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Important Non-Guaranteed Disclaimer in Pass */}
-                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-200 text-xs flex items-start gap-2.5">
-                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                  <p className="leading-relaxed">
-                    <strong className="text-amber-300">Notice:</strong> Application submission does <span className="underline font-bold">not guarantee</span> a whitelist slot of the mint. All submissions undergo proof review and anti-bot verification before final snapshot spots are awarded.
-                  </p>
-                </div>
-
-                {/* Wallet Details Display Card */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  
-                  <div className="md:col-span-2 p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-mono">Submitted Inkonchain Address</span>
-                      <button
-                        onClick={handleCopyPassAddress}
-                        className="text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors cursor-pointer text-[11px]"
-                      >
-                        {copiedPass ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="text-emerald-400">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span>Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <p className="font-mono text-xs sm:text-sm font-bold text-white break-all select-all">
-                      {application.walletAddress}
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
-                    <span className="text-xs text-slate-400 font-mono block">Max Potential Mint</span>
-                    <p className="text-base font-bold text-purple-300 font-mono">
-                      Up to 2 NFTs
-                    </p>
-                    <span className="text-[10px] text-slate-400 font-mono block">
-                      Status: Pending Audit
-                    </span>
-                  </div>
-
-                </div>
-
-                {/* Pass Footer Links */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 text-xs text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                    <span>Queued for snapshot verification. Check eligibility below periodically.</span>
-                  </div>
-
-                  <a
-                    href="#check-eligibility"
-                    className="text-purple-300 hover:text-white font-semibold flex items-center gap-1 transition-colors self-start sm:self-auto"
-                  >
-                    <span>Check Whitelist Status</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-
-              </div>
-            </div>
-          ) : (
-            /* SUBMISSION FORM CONSOLE */
-            <div className={`space-y-6 ${!isAllRequiredDone ? 'opacity-90' : ''}`}>
-              
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-                      Link Inkonchain EVM Address
+                  <div>
+                    <h3 className="font-pixel text-white text-xs sm:text-sm tracking-wide">
+                      QUESTS COMPLETED
                     </h3>
-                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
-                      Required
-                    </span>
-
-                    {!isAllRequiredDone ? (
-                      <span className="px-2.5 py-0.5 text-[10px] font-semibold uppercase rounded-full bg-slate-800 text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> Quests Incomplete
-                      </span>
-                    ) : (
-                      <span className="px-2.5 py-0.5 text-[10px] font-semibold uppercase rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                        <Unlock className="w-3 h-3" /> Ready To Apply
-                      </span>
-                    )}
+                    <p className="text-xs text-slate-400 mt-1 font-mono">
+                      Your whitelist entry is registered & queued for review.
+                    </p>
                   </div>
-
-                  <p className="text-xs sm:text-sm text-slate-300 mt-1">
-                    {isAllRequiredDone
-                      ? 'All quests verified! Enter your EVM address (0x...) to submit your application. Note: Application submission does not guarantee a whitelist slot.'
-                      : 'Complete and verify all required community quests above to unlock EVM address registration.'}
-                  </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 self-start sm:self-auto">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Inkonchain L2 EVM (57073)</span>
-                </div>
+                <span className="font-pixel text-[9px] px-3 py-1.5 rounded bg-emerald-950/60 border border-emerald-500/50 text-emerald-400 uppercase inline-block self-start sm:self-auto">
+                  {application.status === 'WHITELISTED' ? 'WHITELISTED' : 'PENDING REVIEW'}
+                </span>
               </div>
 
-              {/* Form Input Deck */}
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="0x71C...B29 (EVM Address)"
-                    value={walletInput}
-                    onChange={(e) => {
-                      setWalletInput(e.target.value);
-                      setWalletError('');
-                    }}
-                    disabled={!isAllRequiredDone || isSubmitting}
-                    className={`w-full px-4 py-3.5 pr-28 rounded-2xl text-sm font-mono transition-all duration-200 bg-slate-950/90 border ${
-                      walletError
-                        ? 'border-rose-500 focus:border-rose-500 text-rose-400'
-                        : isWalletValid
-                        ? 'border-emerald-500/60 focus:border-emerald-500 text-white'
-                        : 'border-slate-700 focus:border-purple-500 text-white'
-                    } placeholder-slate-500 focus:outline-none disabled:bg-slate-950/40 disabled:border-slate-800 disabled:cursor-not-allowed`}
-                  />
-
-                  {/* Paste Button Helper */}
-                  {isAllRequiredDone && !walletInput && (
-                    <button
-                      type="button"
-                      onClick={handlePasteAddress}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-purple-300 transition-colors cursor-pointer"
-                    >
-                      Paste
-                    </button>
-                  )}
-
-                  {/* Valid EVM indicator check */}
-                  {isWalletValid && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400 flex items-center gap-1 text-xs font-mono">
-                      <Check className="w-4 h-4" /> Valid EVM
-                    </span>
-                  )}
-                </div>
-
-                {walletError && (
-                  <p className="text-xs text-rose-400 flex items-center gap-1.5 pt-1">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{walletError}</span>
-                  </p>
-                )}
-
-                {/* Submit Button & Non-guaranteed note */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <ShieldCheck className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>Submission does not guarantee a slot. Verified against bot attacks.</span>
-                  </div>
-
+              {/* Submitted Wallet Display */}
+              <div className="rounded-xl bg-[#0f121a] border border-sky-600/50 p-4 sm:p-5 shadow-[0_0_12px_rgba(56,189,248,0.15)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-pixel text-[9px] text-[#38BDF8] uppercase">
+                    Registered EVM Wallet
+                  </span>
                   <button
-                    type="submit"
-                    disabled={!isAllRequiredDone || isSubmitting}
-                    className="w-full sm:w-auto px-8 py-3.5 rounded-2xl font-bold text-sm bg-gradient-to-r from-purple-600 via-purple-500 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-xl shadow-purple-950/50 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    onClick={handleCopyPassAddress}
+                    className="font-pixel text-[8px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer transition-colors"
                   >
-                    {isSubmitting ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                        <span>Submitting Application...</span>
-                      </span>
+                    {copiedPass ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-400">COPIED</span>
+                      </>
                     ) : (
                       <>
-                        <Sparkles className="w-4 h-4" />
-                        <span>Submit Whitelist Application</span>
+                        <Copy className="w-3 h-3" />
+                        <span>COPY</span>
                       </>
                     )}
                   </button>
                 </div>
+                <p className="font-mono text-xs sm:text-sm text-white font-semibold break-all select-all">
+                  {application.walletAddress}
+                </p>
+              </div>
 
-              </form>
+              {/* Details grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
+                <div className="p-3 rounded-xl bg-[#181d2a] border border-[#262e40]">
+                  <span className="text-slate-400 text-[11px] block">X Handle / Proof</span>
+                  <span className="text-sky-300 font-semibold truncate block mt-0.5">
+                    {application.xHandle || followProof || 'Verified'}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-[#181d2a] border border-[#262e40]">
+                  <span className="text-slate-400 text-[11px] block">Mint Window</span>
+                  <span className="text-purple-300 font-semibold block mt-0.5">
+                    Wave 1 Priority Allocation
+                  </span>
+                </div>
+              </div>
 
+              {/* Status Note */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-[#181d2a] border border-[#262e40] text-xs text-slate-400">
+                <AlertCircle className="w-4 h-4 text-[#38BDF8] shrink-0 mt-0.5" />
+                <p className="text-[11px] leading-relaxed">
+                  Snapshot audit in progress. You can verify your status anytime using the Eligibility Checker below.
+                </p>
+              </div>
             </div>
-          )}
+          </div>
+        ) : (
+          /* Form with the 3 Quest Cards */
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
+            {/* CARD 1: Follow on X */}
+            <div className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]">
+              <div className="flex items-start gap-4">
+                {/* Icon Box */}
+                <div className="w-12 h-12 rounded-xl bg-[#1d2332] border border-[#2e374d] flex items-center justify-center shrink-0 text-white">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.254 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
+                  </svg>
+                </div>
 
-        </div>
+                {/* Content Header */}
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <div className="font-pixel text-[11px] sm:text-[12px] leading-relaxed tracking-wide">
+                    <span className="text-white">FOLLOW </span>
+                    <a
+                      href="https://x.com/Bunnink0"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#38BDF8] hover:underline cursor-pointer"
+                      title="Follow @Bunnink0 on X"
+                    >
+                      @BUNNINK0
+                    </a>
+                  </div>
 
-      </motion.div>
+                  <div className="mt-2.5">
+                    <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-[#0b1c2d] border border-sky-600/60 text-[#38BDF8] uppercase inline-block">
+                      REQUIRED
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input Field */}
+              <div className="mt-4 sm:mt-5">
+                <input
+                  type="text"
+                  value={followProof}
+                  onChange={(e) => {
+                    setFollowProof(e.target.value);
+                    if (errors.follow) setErrors((prev) => ({ ...prev, follow: undefined }));
+                  }}
+                  placeholder="@yourusername (or profile link)"
+                  className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
+                />
+                {errors.follow && (
+                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors.follow}</p>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 2: Like, Repost & Comment on Pinned Post */}
+            <div className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]">
+              <div className="flex items-start gap-4">
+                {/* Icon Box */}
+                <div className="w-12 h-12 rounded-xl bg-[#1d2332] border border-[#2e374d] flex items-center justify-center shrink-0 text-white">
+                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
+                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.254 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
+                  </svg>
+                </div>
+
+                {/* Content Header */}
+                <div className="flex-1 min-w-0 pt-0.5">
+                  <div className="font-pixel text-[11px] sm:text-[12px] leading-relaxed tracking-wide">
+                    <a
+                      href="https://x.com/Bunnink0"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#38BDF8] underline underline-offset-4 decoration-[#38BDF8] hover:opacity-90 cursor-pointer block"
+                      title="Open pinned post on X"
+                    >
+                      LIKE, REPOST & COMMENT ON PINNED POST
+                    </a>
+                  </div>
+
+                  <div className="mt-2.5">
+                    <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-[#0b1c2d] border border-sky-600/60 text-[#38BDF8] uppercase inline-block">
+                      REQUIRED
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Input Field */}
+              <div className="mt-4 sm:mt-5">
+                <input
+                  type="text"
+                  value={commentProof}
+                  onChange={(e) => {
+                    setCommentProof(e.target.value);
+                    if (errors.comment) setErrors((prev) => ({ ...prev, comment: undefined }));
+                  }}
+                  placeholder="https://x.com/.../status/... (comment link)"
+                  className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
+                />
+                {errors.comment && (
+                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors.comment}</p>
+                )}
+              </div>
+            </div>
+
+            {/* CARD 3: Submit EVM Wallet Address */}
+            <div className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]">
+              <div className="flex items-center gap-4">
+                {/* Icon Box */}
+                <div className="w-12 h-12 rounded-xl bg-[#1d2332] border border-[#2e374d] flex items-center justify-center shrink-0 text-white">
+                  <Wallet className="w-5 h-5 text-white" />
+                </div>
+
+                {/* Content Header */}
+                <div className="flex-1 min-w-0 flex flex-wrap items-center gap-3">
+                  <span className="font-pixel text-[11px] sm:text-[12px] text-white tracking-wide leading-relaxed">
+                    SUBMIT EVM WALLET ADDRESS
+                  </span>
+                  <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-[#0b1c2d] border border-sky-600/60 text-[#38BDF8] uppercase inline-block">
+                    REQUIRED
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Field */}
+              <div className="mt-4 sm:mt-5">
+                <input
+                  type="text"
+                  value={walletInput}
+                  onChange={(e) => {
+                    setWalletInput(e.target.value);
+                    if (errors.wallet) setErrors((prev) => ({ ...prev, wallet: undefined }));
+                  }}
+                  placeholder="0x1234567890abcdef1234567890abcdef12345678"
+                  className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
+                />
+                {errors.wallet && (
+                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors.wallet}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Submission Action Button */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full py-4 px-6 rounded-xl font-pixel text-xs sm:text-sm uppercase tracking-wider bg-[#38BDF8] hover:bg-[#7dd3fc] active:bg-[#0284c7] text-[#08121e] font-bold shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_30px_rgba(56,189,248,0.5)] transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <span>SUBMITTING...</span>
+                ) : (
+                  <span>SUBMIT WHITELIST APPLICATION</span>
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
     </section>
   );
 };
