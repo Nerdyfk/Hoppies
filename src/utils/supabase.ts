@@ -23,7 +23,7 @@ export const SUPABASE_ANON_KEY: string =
 export const ADMIN_PASSWORD: string =
   (typeof process !== 'undefined' && process.env?.ADMIN_PASSWORD) ||
   (import.meta as any).env?.ADMIN_PASSWORD ||
-  'bunink2026';
+  '';
 
 export const ADMIN_USERNAME: string =
   (typeof process !== 'undefined' && process.env?.ADMIN_USERNAME) ||
@@ -184,6 +184,60 @@ export const fetchSubmissionsFromSupabase = async (): Promise<WhitelistSubmissio
       allocation: row.allocation,
       submittedAt: row.submitted_at,
       proofs: row.proofs,
+    }));
+  } catch {
+    return null;
+  }
+};
+
+// Database helper: Save / update quests
+export const saveTasksToSupabase = async (tasks: any[]): Promise<boolean> => {
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from('whitelist_tasks').upsert(
+      tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        action_url: t.action_url,
+        required: t.required ?? true,
+        active: t.active ?? true,
+        sort_order: t.sort_order || 1,
+      })),
+      { onConflict: 'id' }
+    );
+    if (error) {
+      console.warn('Supabase task save notice:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Supabase task error:', err);
+    return false;
+  }
+};
+
+// Database helper: Fetch quests
+export const fetchTasksFromSupabase = async (): Promise<any[] | null> => {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('whitelist_tasks')
+      .select('*')
+      .order('sort_order', { ascending: true });
+
+    if (error || !data || data.length === 0) return null;
+
+    return data.map((r) => ({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      type: r.type || 'custom',
+      action_url: r.action_url,
+      required: r.required ?? true,
+      verification_method: r.verification_method || 'instant',
+      active: r.active ?? true,
+      sort_order: r.sort_order || 1,
     }));
   } catch {
     return null;

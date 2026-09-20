@@ -17,29 +17,32 @@ import {
   FileJson,
   Layers,
   Database,
-  RefreshCw,
   Eye,
+  Copy,
+  Edit3,
+  Power,
+  Filter,
 } from 'lucide-react';
 import { WhitelistSubmission, WhitelistWalletRecord, Task } from '../types.ts';
 import { INITIAL_WHITELISTED_WALLETS, DEFAULT_TASKS } from '../data/mockData.ts';
 import {
   ADMIN_PASSWORD,
-  ADMIN_USERNAME,
   ADMIN_WALLET_ADDRESS,
   isSupabaseConfigured,
   saveWalletToSupabase,
   fetchWalletsFromSupabase,
   fetchSubmissionsFromSupabase,
+  saveTasksToSupabase,
+  fetchTasksFromSupabase,
 } from '../utils/supabase.ts';
 
 interface AdminPanelProps {
   onBackToSite: () => void;
   showToast: (type: 'success' | 'error' | 'info' | 'warning', message: string) => void;
+  onTasksUpdated?: (updatedTasks: Task[]) => void;
 }
 
-const DEFAULT_ADMIN_PASS = 'bunink2026';
-
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast, onTasksUpdated }) => {
   // Auth state
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -53,19 +56,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
   // Active tab
   const [activeTab, setActiveTab] = useState<'wallets' | 'submissions' | 'tasks'>('wallets');
 
-  // Wallets database state
+  // Wallets database state (ensures default initial wallets if local storage is empty)
   const [wallets, setWallets] = useState<Record<string, WhitelistWalletRecord>>(() => {
+    let base = INITIAL_WHITELISTED_WALLETS;
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('bunink_wallets');
       if (stored) {
         try {
-          return JSON.parse(stored);
-        } catch {
-          // fallback
-        }
+          const parsed = JSON.parse(stored);
+          if (parsed && Object.keys(parsed).length > 0) {
+            base = { ...base, ...parsed };
+          }
+        } catch {}
       }
     }
-    return INITIAL_WHITELISTED_WALLETS;
+    return base;
   });
 
   // Submissions state
@@ -74,13 +79,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
       const stored = localStorage.getItem('bunink_submissions');
       if (stored) {
         try {
-          return JSON.parse(stored);
-        } catch {
-          // fallback
-        }
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        } catch {}
       }
     }
-    // Seed with initial applications if none exist
     return [
       {
         id: 'sub-1',
@@ -90,8 +95,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
         tier: 'Tier 1 Guaranteed (Wave 1)',
         allocation: '2 NFTs',
         proofs: [
-          { id: 'task-1', title: 'Follow @Bunnink0 on X', proof: '@bunlover_alpha' },
-          { id: 'task-2', title: 'Like & Repost Pinned Post', proof: 'https://x.com/bunlover_alpha/status/123' },
+          { id: 'task-1-twitter', title: 'Follow @Bunnink0 on X / Twitter', proof: '@bunlover_alpha' },
+          { id: 'task-2-retweet', title: 'Like, Repost & Comment on Pinned Post', proof: 'https://x.com/bunlover_alpha/status/1834920' },
         ],
       },
       {
@@ -102,8 +107,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
         tier: 'Review Pending (Wave 2)',
         allocation: '1 NFT',
         proofs: [
-          { id: 'task-1', title: 'Follow @Bunnink0 on X', proof: '@crypto_hops' },
-          { id: 'task-2', title: 'Like & Repost Pinned Post', proof: '@crypto_hops retweeted' },
+          { id: 'task-1-twitter', title: 'Follow @Bunnink0 on X / Twitter', proof: '@crypto_hops' },
+          { id: 'task-2-retweet', title: 'Like, Repost & Comment on Pinned Post', proof: 'Verified repost and comment @crypto_hops' },
         ],
       },
     ];
@@ -112,36 +117,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
   // Tasks state
   const [tasks, setTasks] = useState<Task[]>(() => {
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('bunink_tasks_config');
+      const stored = localStorage.getItem('bunink_tasks_config') || localStorage.getItem('bunink_tasks');
       if (stored) {
         try {
-          return JSON.parse(stored);
-        } catch {
-          // fallback
-        }
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        } catch {}
       }
     }
     return DEFAULT_TASKS;
   });
 
-  // Search & Filter
+  // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'WHITELISTED' | 'PENDING' | 'REJECTED'>('ALL');
+  const [subSearchQuery, setSubSearchQuery] = useState('');
+  const [subStatusFilter, setSubStatusFilter] = useState<'ALL' | 'WHITELISTED' | 'PENDING' | 'REJECTED'>('ALL');
 
-  // Add single wallet modal/form
+  // Modals for Wallets
   const [showAddModal, setShowAddModal] = useState(false);
   const [newWalletAddress, setNewWalletAddress] = useState('');
   const [newWalletTier, setNewWalletTier] = useState('Tier 1 Guaranteed (Wave 1)');
   const [newWalletAllocation, setNewWalletAllocation] = useState('2 NFTs');
 
-  // Bulk import modal
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkInput, setBulkInput] = useState('');
   const [bulkTier, setBulkTier] = useState('Wave 1 Guaranteed');
   const [bulkAllocation, setBulkAllocation] = useState('1 NFT');
 
-  // View submission proofs modal
-  const [selectedSubmission, setSelectedSubmission] = useState<WhitelistSubmission | null>(null);
+  // Modal for Detailed Submission Audit
+  const [auditSubmission, setAuditSubmission] = useState<WhitelistSubmission | null>(null);
+  const [auditTier, setAuditTier] = useState('');
+  const [auditAllocation, setAuditAllocation] = useState('');
+
+  // Modals for Task Management (Add / Edit)
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDesc, setTaskDesc] = useState('');
+  const [taskUrl, setTaskUrl] = useState('');
+  const [taskRequired, setTaskRequired] = useState(true);
 
   // Sync wallets to localStorage whenever updated
   useEffect(() => {
@@ -152,6 +169,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
   useEffect(() => {
     localStorage.setItem('bunink_submissions', JSON.stringify(submissions));
   }, [submissions]);
+
+  // Sync tasks to localStorage and App.tsx whenever updated
+  const syncTasks = (newTasks: Task[]) => {
+    setTasks(newTasks);
+    localStorage.setItem('bunink_tasks', JSON.stringify(newTasks));
+    localStorage.setItem('bunink_tasks_config', JSON.stringify(newTasks));
+    if (onTasksUpdated) {
+      onTasksUpdated(newTasks);
+    }
+    if (isSupabaseConfigured()) {
+      saveTasksToSupabase(newTasks);
+    }
+  };
 
   // Fetch live Supabase data on load if configured
   useEffect(() => {
@@ -166,20 +196,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
           setSubmissions(remoteSubs);
         }
       });
+      fetchTasksFromSupabase().then((remoteTasks) => {
+        if (remoteTasks && remoteTasks.length > 0) {
+          setTasks(remoteTasks);
+          if (onTasksUpdated) onTasksUpdated(remoteTasks);
+        }
+      });
     }
   }, [isAuthenticated]);
 
-  // Handle Admin Login (supports Vercel ADMIN_PASSWORD, ADMIN_WALLET_ADDRESS, bunink2026, or admin)
+  // Handle Admin Login (strictly authenticated against Vercel ADMIN_PASSWORD / ADMIN_WALLET_ADDRESS)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanInput = passwordInput.trim();
     const envPass = ADMIN_PASSWORD ? ADMIN_PASSWORD.trim() : '';
 
     const isMatch =
-      (envPass && cleanInput === envPass) ||
-      cleanInput === DEFAULT_ADMIN_PASS ||
-      cleanInput === 'admin' ||
-      (ADMIN_WALLET_ADDRESS && cleanInput.toLowerCase() === ADMIN_WALLET_ADDRESS.toLowerCase());
+      Boolean(envPass && cleanInput === envPass) ||
+      Boolean(ADMIN_WALLET_ADDRESS && cleanInput.toLowerCase() === ADMIN_WALLET_ADDRESS.toLowerCase());
 
     if (isMatch) {
       setIsAuthenticated(true);
@@ -218,6 +252,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
     });
   }, [wallets, searchQuery, statusFilter]);
 
+  // Filtered submissions list
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter((sub) => {
+      const matchesSearch =
+        sub.walletAddress.toLowerCase().includes(subSearchQuery.trim().toLowerCase()) ||
+        (sub.proofs && sub.proofs.some((p) => (p.proof || '').toLowerCase().includes(subSearchQuery.trim().toLowerCase())));
+      const matchesStatus = subStatusFilter === 'ALL' || sub.status === subStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [submissions, subSearchQuery, subStatusFilter]);
+
   // Add single wallet
   const handleAddWallet = (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,19 +272,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
       return;
     }
 
+    const newRecord: WhitelistWalletRecord = {
+      status: 'WHITELISTED',
+      tier: newWalletTier,
+      allocation: newWalletAllocation,
+      submittedAt: new Date().toISOString(),
+    };
+
     setWallets((prev) => ({
       ...prev,
-      [cleanAddress]: {
-        status: 'WHITELISTED',
-        tier: newWalletTier,
-        allocation: newWalletAllocation,
-        submittedAt: new Date().toISOString(),
-      },
+      [cleanAddress]: newRecord,
     }));
+
+    if (isSupabaseConfigured()) {
+      saveWalletToSupabase(cleanAddress, newRecord);
+    }
 
     setNewWalletAddress('');
     setShowAddModal(false);
-    showToast('success', `Added ${cleanAddress.slice(0, 6)}... to whitelist database!`);
+    showToast('success', `Added ${cleanAddress.slice(0, 6)}... to whitelist!`);
   };
 
   // Bulk import wallets
@@ -256,72 +307,114 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
     setWallets((prev) => {
       const updated = { ...prev };
       validAddresses.forEach((addr) => {
-        updated[addr] = {
+        const record: WhitelistWalletRecord = {
           status: 'WHITELISTED',
           tier: bulkTier,
           allocation: bulkAllocation,
           submittedAt: new Date().toISOString(),
         };
+        updated[addr] = record;
+        if (isSupabaseConfigured()) {
+          saveWalletToSupabase(addr, record);
+        }
       });
       return updated;
     });
 
     setBulkInput('');
     setShowBulkModal(false);
-    showToast('success', `Successfully imported ${validAddresses.length} wallet addresses!`);
+    showToast('success', `Imported ${validAddresses.length} addresses!`);
   };
 
   // Delete wallet from database
   const handleDeleteWallet = (address: string) => {
-    if (!confirm(`Are you sure you want to remove ${address} from the database?`)) return;
+    if (!confirm(`Remove ${address} from whitelist database?`)) return;
     setWallets((prev) => {
       const updated = { ...prev };
       delete updated[address.toLowerCase()];
       return updated;
     });
-    showToast('info', `Removed ${address.slice(0, 6)}... from whitelist.`);
+    showToast('info', `Removed ${address.slice(0, 6)}...`);
   };
 
   // Update wallet status
-  const handleUpdateWalletStatus = (address: string, newStatus: 'WHITELISTED' | 'PENDING' | 'REJECTED') => {
+  const handleUpdateWalletStatus = (address: string, newStatus: 'WHITELISTED' | 'PENDING' | 'REJECTED', customTier?: string, customAlloc?: string) => {
     const lower = address.toLowerCase();
-    setWallets((prev) => {
-      if (!prev[lower]) return prev;
-      return {
-        ...prev,
-        [lower]: {
-          ...prev[lower],
-          status: newStatus,
-        },
-      };
-    });
+    const existing = wallets[lower] || {
+      status: newStatus,
+      tier: customTier || 'Tier 1 Guaranteed (Wave 1)',
+      allocation: customAlloc || '2 NFTs',
+      submittedAt: new Date().toISOString(),
+    };
 
-    // Also sync with submissions if present
+    const updatedRecord: WhitelistWalletRecord = {
+      ...existing,
+      status: newStatus,
+      tier: customTier || existing.tier,
+      allocation: customAlloc || existing.allocation,
+    };
+
+    setWallets((prev) => ({
+      ...prev,
+      [lower]: updatedRecord,
+    }));
+
+    if (isSupabaseConfigured()) {
+      saveWalletToSupabase(lower, updatedRecord);
+    }
+
+    // Also sync with submissions list
     setSubmissions((prev) =>
       prev.map((sub) =>
-        sub.walletAddress.toLowerCase() === lower ? { ...sub, status: newStatus } : sub
+        sub.walletAddress.toLowerCase() === lower
+          ? { ...sub, status: newStatus, tier: updatedRecord.tier, allocation: updatedRecord.allocation }
+          : sub
       )
     );
 
-    showToast('success', `Updated status to ${newStatus} for ${address.slice(0, 6)}...`);
+    showToast('success', `Wallet ${address.slice(0, 6)}... set to ${newStatus}`);
   };
 
-  // Approve Submission
-  const handleApproveSubmission = (sub: WhitelistSubmission) => {
-    handleUpdateWalletStatus(sub.walletAddress, 'WHITELISTED');
-    showToast('success', `Application approved for ${sub.walletAddress.slice(0, 6)}...`);
+  // Open Full Audit Modal
+  const handleOpenAuditModal = (sub: WhitelistSubmission) => {
+    setAuditSubmission(sub);
+    setAuditTier(sub.tier || 'Tier 1 Guaranteed (Wave 1)');
+    setAuditAllocation(sub.allocation || '2 NFTs');
+  };
+
+  // Approve Submission from Audit Modal or row
+  const handleApproveSubmission = (sub: WhitelistSubmission, tierOverride?: string, allocOverride?: string) => {
+    const tier = tierOverride || auditTier || sub.tier || 'Tier 1 Guaranteed (Wave 1)';
+    const alloc = allocOverride || auditAllocation || sub.allocation || '2 NFTs';
+    handleUpdateWalletStatus(sub.walletAddress, 'WHITELISTED', tier, alloc);
+    if (auditSubmission?.id === sub.id) {
+      setAuditSubmission(null);
+    }
+    showToast('success', `Approved whitelist for ${sub.walletAddress.slice(0, 6)}...`);
   };
 
   // Reject Submission
   const handleRejectSubmission = (sub: WhitelistSubmission) => {
     handleUpdateWalletStatus(sub.walletAddress, 'REJECTED');
-    showToast('info', `Application rejected for ${sub.walletAddress.slice(0, 6)}...`);
+    if (auditSubmission?.id === sub.id) {
+      setAuditSubmission(null);
+    }
+    showToast('info', `Rejected application for ${sub.walletAddress.slice(0, 6)}...`);
   };
 
   // Delete Submission
   const handleDeleteSubmission = (id: string) => {
     setSubmissions((prev) => prev.filter((s) => s.id !== id));
+    if (auditSubmission?.id === id) {
+      setAuditSubmission(null);
+    }
     showToast('info', 'Submission deleted.');
+  };
+
+  // Copy helper
+  const handleCopyText = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    showToast('success', `Copied ${label} to clipboard!`);
   };
 
   // Export CSV
@@ -343,7 +436,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('success', 'Whitelist CSV snapshot exported successfully.');
+    showToast('success', 'Exported whitelist CSV snapshot.');
   };
 
   // Export JSON
@@ -355,15 +448,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('success', 'Whitelist JSON snapshot exported successfully.');
+    showToast('success', 'Exported whitelist JSON snapshot.');
   };
 
-  // Reset to default mock data
+  // Reset to default seed
   const handleResetDatabase = () => {
-    if (!confirm('Are you sure you want to reset to initial seed data?')) return;
+    if (!confirm('Reset database to default seed wallets?')) return;
     setWallets(INITIAL_WHITELISTED_WALLETS);
     localStorage.removeItem('bunink_wallets');
-    showToast('info', 'Database reset to default initial wallets.');
+    showToast('info', 'Database reset to default.');
+  };
+
+  // ===================== TASK / QUEST CRUD HANDLERS =====================
+  const handleOpenAddTask = () => {
+    setEditingTaskId(null);
+    setTaskTitle('');
+    setTaskDesc('');
+    setTaskUrl('https://x.com/Bunnink0');
+    setTaskRequired(true);
+    setShowTaskModal(true);
+  };
+
+  const handleOpenEditTask = (task: Task) => {
+    setEditingTaskId(task.id);
+    setTaskTitle(task.title);
+    setTaskDesc(task.description);
+    setTaskUrl(task.action_url);
+    setTaskRequired(task.required);
+    setShowTaskModal(true);
+  };
+
+  const handleSaveTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!taskTitle.trim()) {
+      showToast('warning', 'Task title is required.');
+      return;
+    }
+
+    if (editingTaskId) {
+      // Edit existing task
+      const updated = tasks.map((t) =>
+        t.id === editingTaskId
+          ? {
+              ...t,
+              title: taskTitle.trim(),
+              description: taskDesc.trim(),
+              action_url: taskUrl.trim(),
+              required: taskRequired,
+            }
+          : t
+      );
+      syncTasks(updated);
+      showToast('success', 'Quest updated successfully!');
+    } else {
+      // Add new task
+      const newTask: Task = {
+        id: `task-${Date.now()}`,
+        title: taskTitle.trim(),
+        description: taskDesc.trim(),
+        type: 'custom',
+        action_url: taskUrl.trim(),
+        required: taskRequired,
+        verification_method: 'instant',
+        active: true,
+        sort_order: tasks.length + 1,
+      };
+      syncTasks([...tasks, newTask]);
+      showToast('success', 'New quest added!');
+    }
+
+    setShowTaskModal(false);
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    if (!confirm('Are you sure you want to delete this quest?')) return;
+    const updated = tasks.filter((t) => t.id !== taskId);
+    syncTasks(updated);
+    showToast('info', 'Quest deleted.');
+  };
+
+  const handleToggleTaskActive = (taskId: string) => {
+    const updated = tasks.map((t) => (t.id === taskId ? { ...t, active: !t.active } : t));
+    syncTasks(updated);
+    const task = updated.find((t) => t.id === taskId);
+    showToast('info', `Quest "${task?.title}" is now ${task?.active ? 'ACTIVE' : 'PAUSED'}.`);
   };
 
   // Render Login Card if not authenticated
@@ -401,14 +569,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                   type="password"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Passcode: bunink2026"
+                  placeholder="Enter admin password..."
                   className="w-full pl-10 pr-4 py-3 bg-[#0d1017] border border-sky-500/40 rounded-xl text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
                   autoFocus
                 />
               </div>
               {authError && (
                 <p className="font-pixel text-[9px] text-rose-400 mt-2">
-                  Passcode incorrect. Default: bunink2026
+                  Passcode incorrect. Please check your credentials.
                 </p>
               )}
             </div>
@@ -420,10 +588,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
               <span>ACCESS ADMIN DASHBOARD</span>
             </button>
           </form>
-
-          <p className="text-center font-mono text-[10px] text-slate-500 mt-6">
-            Default Master Key: <code className="text-sky-400 font-bold">bunink2026</code>
-          </p>
         </div>
       </div>
     );
@@ -484,7 +648,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
               <Database className="w-4 h-4 text-sky-400" />
             </div>
             <p className="text-2xl sm:text-3xl font-bold font-mono text-white mt-2">{stats.total}</p>
-            <p className="text-[11px] text-slate-400 mt-1">In local active database</p>
+            <p className="text-[11px] text-slate-400 mt-1">In active whitelist database</p>
           </div>
 
           <div className="p-4 rounded-2xl bg-[#141822] border border-emerald-500/30 shadow-lg">
@@ -516,11 +680,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setActiveTab('wallets')}
-              className={`px-4 py-2 rounded-xl text-xs font-pixel uppercase transition-all cursor-pointer flex items-center gap-2 ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-pixel uppercase transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'wallets'
                   ? 'bg-sky-500 text-[#08121e] font-bold shadow-[0_0_15px_rgba(56,189,248,0.3)]'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-400'
@@ -532,7 +696,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
 
             <button
               onClick={() => setActiveTab('submissions')}
-              className={`px-4 py-2 rounded-xl text-xs font-pixel uppercase transition-all cursor-pointer flex items-center gap-2 ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-pixel uppercase transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'submissions'
                   ? 'bg-sky-500 text-[#08121e] font-bold shadow-[0_0_15px_rgba(56,189,248,0.3)]'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-400'
@@ -544,14 +708,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
 
             <button
               onClick={() => setActiveTab('tasks')}
-              className={`px-4 py-2 rounded-xl text-xs font-pixel uppercase transition-all cursor-pointer flex items-center gap-2 ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-pixel uppercase transition-all cursor-pointer flex items-center gap-2 ${
                 activeTab === 'tasks'
                   ? 'bg-sky-500 text-[#08121e] font-bold shadow-[0_0_15px_rgba(56,189,248,0.3)]'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-400'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
-              <span>Quests ({tasks.length})</span>
+              <span>Quests & Tasks ({tasks.length})</span>
             </button>
           </div>
 
@@ -591,7 +755,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                 />
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
@@ -647,9 +811,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                         <tr key={address} className="hover:bg-slate-800/40 transition-colors">
                           <td className="py-3.5 px-4 text-slate-500">{idx + 1}</td>
                           <td className="py-3.5 px-4">
-                            <span className="text-sky-300 font-semibold selection:bg-sky-500 selection:text-black">
-                              {address}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sky-300 font-semibold">{address}</span>
+                              <button
+                                onClick={() => handleCopyText(address, 'Address')}
+                                title="Copy address"
+                                className="text-slate-500 hover:text-sky-400 cursor-pointer"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </button>
+                              <a
+                                href={`https://explorer.inkonchain.com/address/${address}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="View on Inkonchain Explorer"
+                                className="text-slate-500 hover:text-sky-400"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
                           </td>
                           <td className="py-3.5 px-4">
                             {record.status === 'WHITELISTED' && (
@@ -675,7 +855,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                               {record.status !== 'WHITELISTED' && (
                                 <button
                                   onClick={() => handleUpdateWalletStatus(address, 'WHITELISTED')}
-                                  title="Set to Whitelisted"
+                                  title="Approve & Whitelist"
                                   className="p-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 cursor-pointer"
                                 >
                                   <Check className="w-3.5 h-3.5" />
@@ -719,35 +899,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
           </div>
         )}
 
-        {/* TAB 2: USER APPLICATIONS / SUBMISSIONS */}
+        {/* TAB 2: USER APPLICATIONS / DETAILED SUBMISSION AUDIT */}
         {activeTab === 'submissions' && (
           <div className="space-y-4">
-            <div className="bg-[#141822] p-4 rounded-2xl border border-sky-500/20">
-              <p className="text-xs text-slate-400 font-mono">
-                User applications submitted via the frontend Whitelist Quests section. Review social proofs before approving.
-              </p>
+            {/* Search and Filters for Submissions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#141822] p-3.5 rounded-2xl border border-sky-500/20">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search by wallet or social proof..."
+                  value={subSearchQuery}
+                  onChange={(e) => setSubSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <select
+                  value={subStatusFilter}
+                  onChange={(e) => setSubStatusFilter(e.target.value as any)}
+                  className="px-3 py-2 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-slate-300 focus:outline-none focus:border-sky-400"
+                >
+                  <option value="ALL">All Applications ({submissions.length})</option>
+                  <option value="PENDING">Pending Audit ({submissions.filter((s) => s.status === 'PENDING').length})</option>
+                  <option value="WHITELISTED">Approved ({submissions.filter((s) => s.status === 'WHITELISTED').length})</option>
+                  <option value="REJECTED">Rejected ({submissions.filter((s) => s.status === 'REJECTED').length})</option>
+                </select>
+              </div>
             </div>
 
+            {/* Submissions Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {submissions.length === 0 ? (
+              {filteredSubmissions.length === 0 ? (
                 <div className="col-span-2 py-12 text-center text-slate-500 font-mono bg-[#141822] rounded-2xl border border-slate-800">
-                  No applications recorded yet.
+                  No applications found matching search or filter.
                 </div>
               ) : (
-                submissions.map((sub) => (
+                filteredSubmissions.map((sub) => (
                   <div
                     key={sub.id}
-                    className="p-5 rounded-2xl bg-[#141822] border border-sky-500/30 space-y-4 shadow-lg"
+                    className="p-5 rounded-2xl bg-[#141822] border border-sky-500/30 space-y-4 shadow-lg hover:border-sky-500/60 transition-all"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <span className="text-[10px] font-mono text-slate-500 uppercase block">Applicant Address</span>
-                        <span className="font-mono text-xs text-sky-300 font-bold block mt-0.5 break-all">
-                          {sub.walletAddress}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-xs text-sky-300 font-bold break-all">
+                            {sub.walletAddress}
+                          </span>
+                          <button
+                            onClick={() => handleCopyText(sub.walletAddress, 'Address')}
+                            className="text-slate-500 hover:text-sky-400 cursor-pointer shrink-0"
+                            title="Copy address"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono ${
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono shrink-0 ${
                           sub.status === 'WHITELISTED'
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
                             : sub.status === 'PENDING'
@@ -759,37 +970,71 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                       </span>
                     </div>
 
-                    {/* Proofs preview */}
-                    <div className="bg-[#0d1017] p-3 rounded-xl border border-slate-800/80 space-y-2">
+                    {/* Social Proofs Inspection Card */}
+                    <div className="bg-[#0d1017] p-3.5 rounded-xl border border-slate-800 space-y-2.5">
                       <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase">
-                        <span>Submitted Quest Proofs</span>
-                        <span className="text-slate-500">{sub.proofs?.length || 0} tasks completed</span>
+                        <span>Submitted Social Proofs</span>
+                        <span className="text-sky-400 font-bold">{sub.proofs?.length || 0} Quests Completed</span>
                       </div>
+
                       {sub.proofs && sub.proofs.length > 0 ? (
-                        <div className="space-y-1.5 pt-1">
-                          {sub.proofs.map((p, idx) => (
-                            <div key={idx} className="text-xs font-mono flex items-start gap-2">
-                              <span className="text-sky-400 shrink-0">✓</span>
-                              <div className="min-w-0">
-                                <span className="text-slate-400 text-[11px] block">{p.title}:</span>
-                                <span className="text-slate-200 font-semibold break-all bg-slate-800/60 px-1.5 py-0.5 rounded text-[11px]">
-                                  {p.proof || 'Verified via Quest'}
-                                </span>
+                        <div className="space-y-2 pt-1">
+                          {sub.proofs.map((p, idx) => {
+                            const proofText = (p.proof || '').trim();
+                            const isUrl = proofText.startsWith('http://') || proofText.startsWith('https://');
+                            const isTwitterHandle = proofText.startsWith('@');
+                            const targetUrl = isUrl
+                              ? proofText
+                              : isTwitterHandle
+                              ? `https://x.com/${proofText.replace('@', '')}`
+                              : null;
+
+                            return (
+                              <div key={idx} className="text-xs font-mono bg-slate-900/80 p-2.5 rounded-lg border border-slate-800/80">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-slate-400 text-[11px] font-semibold">{p.title}</span>
+                                  {targetUrl && (
+                                    <a
+                                      href={targetUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-[10px] text-sky-400 hover:text-sky-300 font-mono inline-flex items-center gap-1 hover:underline"
+                                    >
+                                      <span>Verify link</span>
+                                      <ExternalLink className="w-2.5 h-2.5" />
+                                    </a>
+                                  )}
+                                </div>
+                                <div className="mt-1 flex items-center justify-between">
+                                  <span className="text-white font-mono text-xs font-bold break-all">
+                                    {proofText || 'Verified via Quest'}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-xs text-slate-500 font-mono">No proofs attached</p>
                       )}
                     </div>
 
+                    {/* Footer Actions */}
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800">
-                      <span className="text-[10px] font-mono text-slate-500">
-                        {new Date(sub.submittedAt).toLocaleString()}
-                      </span>
+                      <div className="text-[10px] font-mono text-slate-500">
+                        <span>{new Date(sub.submittedAt).toLocaleDateString()}</span>
+                        <span className="block text-slate-400">{sub.tier}</span>
+                      </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenAuditModal(sub)}
+                          className="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Audit Details</span>
+                        </button>
+
                         {sub.status !== 'WHITELISTED' && (
                           <button
                             onClick={() => handleApproveSubmission(sub)}
@@ -811,7 +1056,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                         <button
                           onClick={() => handleDeleteSubmission(sub.id)}
                           className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 cursor-pointer"
-                          title="Delete entry"
+                          title="Delete submission"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -824,45 +1069,381 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
           </div>
         )}
 
-        {/* TAB 3: QUESTS CONFIG */}
+        {/* TAB 3: QUESTS / TASKS CONFIGURATION (ADD, EDIT, DELETE, TOGGLE) */}
         {activeTab === 'tasks' && (
-          <div className="bg-[#141822] p-6 rounded-2xl border border-sky-500/20 space-y-4">
-            <h2 className="text-sm font-pixel text-sky-400">ACTIVE WHITELIST QUESTS</h2>
-            <p className="text-xs text-slate-400 font-mono">
-              These quests are displayed to users on the homepage before they can submit their wallet.
-            </p>
+          <div className="bg-[#141822] p-6 rounded-2xl border border-sky-500/20 space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h2 className="text-sm font-pixel text-sky-400">WHITELIST QUESTS MANAGER</h2>
+                <p className="text-xs text-slate-400 font-mono mt-1">
+                  Add, edit, pause, or delete tasks that users must complete before submitting their wallet.
+                </p>
+              </div>
 
-            <div className="space-y-3 pt-2">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="p-4 rounded-xl bg-[#0d1017] border border-slate-800 flex items-center justify-between gap-4"
-                >
-                  <div>
-                    <h3 className="text-xs font-pixel text-slate-200">{task.title}</h3>
-                    <p className="text-xs text-slate-400 font-mono mt-1">{task.description}</p>
-                    <a
-                      href={task.action_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-sky-400 font-mono hover:underline inline-flex items-center gap-1 mt-2"
-                    >
-                      <span>Action URL: {task.action_url}</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
+              <button
+                onClick={handleOpenAddTask}
+                className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-[#08121e] text-xs font-pixel uppercase font-bold transition-all flex items-center gap-2 cursor-pointer shadow-[0_0_15px_rgba(56,189,248,0.3)]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Quest</span>
+              </button>
+            </div>
 
-                  <span className="px-2.5 py-1 rounded text-[10px] font-bold font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                    ACTIVE
-                  </span>
+            <div className="space-y-3 pt-1">
+              {tasks.length === 0 ? (
+                <div className="py-12 text-center text-slate-500 font-mono">
+                  No quests configured. Click "Add New Quest" above to create one.
                 </div>
-              ))}
+              ) : (
+                tasks.map((task, idx) => (
+                  <div
+                    key={task.id}
+                    className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                      task.active
+                        ? 'bg-[#0d1017] border-slate-800 hover:border-sky-500/40'
+                        : 'bg-[#0d1017]/50 border-slate-800/40 opacity-60'
+                    }`}
+                  >
+                    <div className="space-y-1 max-w-xl">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-pixel text-slate-200">
+                          {idx + 1}. {task.title}
+                        </span>
+                        {task.required && (
+                          <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                            REQUIRED
+                          </span>
+                        )}
+                        <span
+                          className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            task.active
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : 'bg-slate-700 text-slate-400'
+                          }`}
+                        >
+                          {task.active ? 'ACTIVE' : 'PAUSED'}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-400 font-mono">{task.description}</p>
+
+                      <div className="pt-1">
+                        <a
+                          href={task.action_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-sky-400 font-mono hover:underline inline-flex items-center gap-1"
+                        >
+                          <span>URL: {task.action_url}</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                      <button
+                        onClick={() => handleToggleTaskActive(task.id)}
+                        className={`p-2 rounded-lg text-xs font-mono transition-all cursor-pointer flex items-center gap-1.5 ${
+                          task.active
+                            ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300'
+                            : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300'
+                        }`}
+                        title={task.active ? 'Pause this quest' : 'Activate this quest'}
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                        <span>{task.active ? 'Pause' : 'Activate'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenEditTask(task)}
+                        className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono transition-all cursor-pointer flex items-center gap-1.5"
+                        title="Edit Quest"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteTask(task.id)}
+                        className="p-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-xs font-mono transition-all cursor-pointer"
+                        title="Delete Quest"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         )}
       </main>
 
-      {/* Modal: Add Single Wallet */}
+      {/* ===================== MODAL: DETAILED SUBMISSION AUDIT ===================== */}
+      {auditSubmission && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl bg-[#141822] text-white rounded-2xl border border-sky-500/50 p-6 space-y-5 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400 flex items-center justify-center text-sky-400">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-pixel text-xs text-sky-400">APPLICATION AUDIT CONSOLE</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">Verify applicant social tasks before assigning whitelist</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAuditSubmission(null)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Applicant Details */}
+            <div className="bg-[#0d1017] p-4 rounded-xl border border-slate-800 space-y-2 font-mono">
+              <div className="text-[10px] text-slate-500 uppercase">Applicant EVM Wallet</div>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-sm font-bold text-sky-300 break-all">{auditSubmission.walletAddress}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleCopyText(auditSubmission.walletAddress, 'Address')}
+                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Copy</span>
+                  </button>
+                  <a
+                    href={`https://explorer.inkonchain.com/address/${auditSubmission.walletAddress}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-sky-400 flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    <span>Explorer</span>
+                  </a>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs border-t border-slate-800/80">
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block">Submitted At</span>
+                  <span className="text-slate-300">{new Date(auditSubmission.submittedAt).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 uppercase block">Current Audit Status</span>
+                  <span
+                    className={`inline-block font-bold text-xs ${
+                      auditSubmission.status === 'WHITELISTED'
+                        ? 'text-emerald-400'
+                        : auditSubmission.status === 'PENDING'
+                        ? 'text-amber-400'
+                        : 'text-rose-400'
+                    }`}
+                  >
+                    {auditSubmission.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Proofs Review List */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-pixel text-slate-300 uppercase">QUEST PROOFS SUBMITTED</div>
+              <div className="space-y-2">
+                {auditSubmission.proofs && auditSubmission.proofs.length > 0 ? (
+                  auditSubmission.proofs.map((p, idx) => {
+                    const proofText = (p.proof || '').trim();
+                    const isUrl = proofText.startsWith('http://') || proofText.startsWith('https://');
+                    const isTwitterHandle = proofText.startsWith('@');
+                    const targetUrl = isUrl
+                      ? proofText
+                      : isTwitterHandle
+                      ? `https://x.com/${proofText.replace('@', '')}`
+                      : null;
+
+                    return (
+                      <div key={idx} className="bg-[#0d1017] p-3.5 rounded-xl border border-slate-800 font-mono text-xs space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-300 font-bold">{p.title}</span>
+                          <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            COMPLETED
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded bg-slate-900 border border-slate-800 flex items-center justify-between gap-3">
+                          <span className="text-white font-mono break-all font-semibold">{proofText || 'Verified'}</span>
+                          {targetUrl && (
+                            <a
+                              href={targetUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-bold inline-flex items-center gap-1.5 shrink-0"
+                            >
+                              <span>Open Proof</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-4 bg-[#0d1017] rounded-xl text-slate-500 font-mono text-xs text-center">
+                    No proofs attached to this submission.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Allocation & Tier Config */}
+            <div className="grid grid-cols-2 gap-4 bg-[#0d1017] p-3.5 rounded-xl border border-slate-800 font-mono text-xs">
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">Assign Whitelist Tier</label>
+                <select
+                  value={auditTier}
+                  onChange={(e) => setAuditTier(e.target.value)}
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-400"
+                >
+                  <option value="Tier 1 Guaranteed (Wave 1)">Tier 1 Guaranteed (Wave 1)</option>
+                  <option value="Wave 1 Allocation">Wave 1 Allocation</option>
+                  <option value="Wave 2 Priority">Wave 2 Priority</option>
+                  <option value="Community Whitelist">Community Whitelist</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">Mint Allocation</label>
+                <select
+                  value={auditAllocation}
+                  onChange={(e) => setAuditAllocation(e.target.value)}
+                  className="w-full p-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-sky-400"
+                >
+                  <option value="1 NFT">1 NFT</option>
+                  <option value="2 NFTs">2 NFTs</option>
+                  <option value="3 NFTs">3 NFTs</option>
+                  <option value="5 NFTs">5 NFTs (VIP)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800 font-mono">
+              <button
+                onClick={() => handleDeleteSubmission(auditSubmission.id)}
+                className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 text-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleRejectSubmission(auditSubmission)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 text-xs font-bold cursor-pointer"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => handleApproveSubmission(auditSubmission, auditTier, auditAllocation)}
+                  className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#08121e] text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Approve & Whitelist</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL: ADD / EDIT QUEST ===================== */}
+      {showTaskModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#141822] text-white rounded-2xl border border-sky-500/50 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-pixel text-xs text-sky-400">
+                {editingTaskId ? 'EDIT WHITELIST QUEST' : 'ADD NEW WHITELIST QUEST'}
+              </h3>
+              <button
+                onClick={() => setShowTaskModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTask} className="space-y-4 font-mono text-xs">
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">Quest Title</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Follow @Bunnink0 on X"
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">Quest Description</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Explain instructions to the user..."
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  className="w-full p-3 bg-[#0d1017] border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">Action URL (Link)</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://x.com/... or https://discord.gg/..."
+                  value={taskUrl}
+                  onChange={(e) => setTaskUrl(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="taskRequiredCheckbox"
+                  checked={taskRequired}
+                  onChange={(e) => setTaskRequired(e.target.checked)}
+                  className="w-4 h-4 accent-sky-500 rounded cursor-pointer"
+                />
+                <label htmlFor="taskRequiredCheckbox" className="text-slate-300 select-none cursor-pointer">
+                  Required task to unlock whitelist submission
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowTaskModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-[#08121e] font-bold cursor-pointer"
+                >
+                  {editingTaskId ? 'Save Changes' : 'Create Quest'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================== MODAL: ADD SINGLE WALLET ===================== */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-[#141822] text-white rounded-2xl border border-sky-500/40 p-6 space-y-4 shadow-2xl">
@@ -876,9 +1457,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
               </button>
             </div>
 
-            <form onSubmit={handleAddWallet} className="space-y-4">
+            <form onSubmit={handleAddWallet} className="space-y-4 font-mono text-xs">
               <div>
-                <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
                   EVM Wallet Address (0x...)
                 </label>
                 <input
@@ -887,18 +1468,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                   placeholder="0x..."
                   value={newWalletAddress}
                   onChange={(e) => setNewWalletAddress(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
                   Whitelist Tier
                 </label>
                 <select
                   value={newWalletTier}
                   onChange={(e) => setNewWalletTier(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-sky-400"
+                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-white focus:outline-none focus:border-sky-400"
                 >
                   <option value="Tier 1 Guaranteed (Wave 1)">Tier 1 Guaranteed (Wave 1)</option>
                   <option value="Wave 1 Allocation">Wave 1 Allocation</option>
@@ -908,14 +1489,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
                   Allocation Quantity
                 </label>
                 <input
                   type="text"
                   value={newWalletAllocation}
                   onChange={(e) => setNewWalletAllocation(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-sky-400"
+                  className="w-full px-3.5 py-2.5 bg-[#0d1017] border border-slate-700 rounded-xl text-white focus:outline-none focus:border-sky-400"
                 />
               </div>
 
@@ -923,13 +1504,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-[#08121e] text-xs font-bold font-mono cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-[#08121e] font-bold cursor-pointer"
                 >
                   Add to Whitelist
                 </button>
@@ -939,7 +1520,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
         </div>
       )}
 
-      {/* Modal: Bulk Import Wallets */}
+      {/* ===================== MODAL: BULK IMPORT WALLETS ===================== */}
       {showBulkModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-[#141822] text-white rounded-2xl border border-sky-500/40 p-6 space-y-4 shadow-2xl">
@@ -953,9 +1534,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
               </button>
             </div>
 
-            <form onSubmit={handleBulkImport} className="space-y-4">
+            <form onSubmit={handleBulkImport} className="space-y-4 font-mono text-xs">
               <div>
-                <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                <label className="block text-[10px] text-slate-400 uppercase mb-1">
                   Paste Addresses (One per line or comma-separated)
                 </label>
                 <textarea
@@ -964,31 +1545,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                   placeholder="0x1234567890123456789012345678901234567890&#10;0xabcdefabcdefabcdefabcdefabcdefabcdefabcd"
                   value={bulkInput}
                   onChange={(e) => setBulkInput(e.target.value)}
-                  className="w-full p-3 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
+                  className="w-full p-3 bg-[#0d1017] border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-sky-400"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
                     Assign Tier
                   </label>
                   <input
                     type="text"
                     value={bulkTier}
                     onChange={(e) => setBulkTier(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-sky-400"
+                    className="w-full px-3 py-2 bg-[#0d1017] border border-slate-700 rounded-xl text-white focus:outline-none focus:border-sky-400"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono text-slate-400 uppercase mb-1">
+                  <label className="block text-[10px] text-slate-400 uppercase mb-1">
                     Assign Allocation
                   </label>
                   <input
                     type="text"
                     value={bulkAllocation}
                     onChange={(e) => setBulkAllocation(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0d1017] border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-sky-400"
+                    className="w-full px-3 py-2 bg-[#0d1017] border border-slate-700 rounded-xl text-white focus:outline-none focus:border-sky-400"
                   />
                 </div>
               </div>
@@ -997,13 +1578,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
                 <button
                   type="button"
                   onClick={() => setShowBulkModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-slate-300 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-mono cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold cursor-pointer"
                 >
                   Import All Wallets
                 </button>

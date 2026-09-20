@@ -396,7 +396,11 @@ export default function App() {
     return (
       <div className="relative min-h-screen bg-[#0d1017]">
         <Toast toast={toast} onClose={closeToast} />
-        <AdminPanel onBackToSite={navigateToHome} showToast={showToast} />
+        <AdminPanel
+          onBackToSite={navigateToHome}
+          showToast={showToast}
+          onTasksUpdated={setTasks}
+        />
       </div>
     );
   }
