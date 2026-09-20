@@ -16,8 +16,25 @@ export interface WhitelistApplication {
   walletAddress: string;
   xHandle?: string;
   submittedAt: string;
-  status: 'WHITELISTED' | 'PENDING' | 'NOT_FOUND';
+  status: 'WHITELISTED' | 'PENDING' | 'REJECTED' | 'NOT_FOUND';
   tier?: string;
+}
+
+export interface WhitelistSubmission {
+  id: string;
+  walletAddress: string;
+  submittedAt: string;
+  status: 'WHITELISTED' | 'PENDING' | 'REJECTED';
+  tier: string;
+  allocation: string;
+  proofs?: { id: string; title: string; proof?: string }[];
+}
+
+export interface WhitelistWalletRecord {
+  status: 'WHITELISTED' | 'PENDING' | 'REJECTED';
+  tier: string;
+  allocation: string;
+  submittedAt?: string;
 }
 
 export interface WhitelistCheckResponse {

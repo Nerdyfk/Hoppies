@@ -5,10 +5,54 @@ import { TasksSection } from './components/TasksSection.tsx';
 import { EligibilityChecker } from './components/EligibilityChecker.tsx';
 import { Footer } from './components/Footer.tsx';
 import { Toast } from './components/Toast.tsx';
-import { Task, WhitelistApplication, WhitelistCheckResponse, ToastMessage } from './types.ts';
+import { AdminPanel } from './components/AdminPanel.tsx';
+import { Task, WhitelistApplication, WhitelistCheckResponse, WhitelistSubmission, ToastMessage } from './types.ts';
 import { DEFAULT_TASKS, INITIAL_WHITELISTED_WALLETS } from './data/mockData.ts';
 
 export default function App() {
+  const [currentRoute, setCurrentRoute] = useState<'home' | 'admin'>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      if (path === '/admin' || path.startsWith('/admin') || window.location.hash === '#admin') {
+        return 'admin';
+      }
+    }
+    return 'home';
+  });
+
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const path = window.location.pathname.toLowerCase();
+      if (path === '/admin' || path.startsWith('/admin') || window.location.hash === '#admin') {
+        setCurrentRoute('admin');
+      } else {
+        setCurrentRoute('home');
+      }
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  const navigateToAdmin = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', '/admin');
+      setCurrentRoute('admin');
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const navigateToHome = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState(null, '', '/');
+      setCurrentRoute('home');
+      window.scrollTo(0, 0);
+    }
+  };
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('bunink_theme');
@@ -183,16 +227,47 @@ export default function App() {
     localStorage.setItem('bunink_app', JSON.stringify(newApp));
     setApplication(newApp);
 
-    // Also update local wallet database
+    // Also update local wallet database preserving existing entries
+    let existingWallets = INITIAL_WHITELISTED_WALLETS;
+    const storedWallets = localStorage.getItem('bunink_wallets');
+    if (storedWallets) {
+      try {
+        existingWallets = { ...existingWallets, ...JSON.parse(storedWallets) };
+      } catch {}
+    }
     const currentWallets = {
-      ...INITIAL_WHITELISTED_WALLETS,
+      ...existingWallets,
       [normalized]: {
         status: 'PENDING' as const,
         tier: 'Wave 1 Priority (Pending Review)',
         allocation: 'Up to 2 NFTs (Subject to Review)',
+        submittedAt: new Date().toISOString(),
       },
     };
     localStorage.setItem('bunink_wallets', JSON.stringify(currentWallets));
+
+    // Record in bunink_submissions for Admin Panel review with task proofs
+    let existingSubmissions: WhitelistSubmission[] = [];
+    const storedSubs = localStorage.getItem('bunink_submissions');
+    if (storedSubs) {
+      try {
+        existingSubmissions = JSON.parse(storedSubs);
+      } catch {}
+    }
+    const newSubmission: WhitelistSubmission = {
+      id: `sub-${Date.now()}`,
+      walletAddress: walletAddress,
+      submittedAt: new Date().toISOString(),
+      status: 'PENDING',
+      tier: 'Wave 1 Priority (Pending Review)',
+      allocation: 'Up to 2 NFTs (Subject to Review)',
+      proofs: tasks.map((t) => ({ id: t.id, title: t.title, proof: t.userProof })),
+    };
+    const updatedSubmissions = [
+      newSubmission,
+      ...existingSubmissions.filter((s) => s.walletAddress.toLowerCase() !== normalized),
+    ];
+    localStorage.setItem('bunink_submissions', JSON.stringify(updatedSubmissions));
 
     // Try submitting to /api/whitelist/submit if endpoint exists
     try {
@@ -282,6 +357,15 @@ export default function App() {
       el.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  if (currentRoute === 'admin') {
+    return (
+      <div className="relative min-h-screen bg-[#0d1017]">
+        <Toast toast={toast} onClose={closeToast} />
+        <AdminPanel onBackToSite={navigateToHome} showToast={showToast} />
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-[#FEF3C7] text-slate-900 transition-colors duration-200 flex flex-col justify-between overflow-x-hidden">
