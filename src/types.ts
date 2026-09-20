@@ -39,7 +39,7 @@ export interface WhitelistWalletRecord {
 
 export interface WhitelistCheckResponse {
   found: boolean;
-  status: 'WHITELISTED' | 'PENDING' | 'NOT_FOUND';
+  status: 'WHITELISTED' | 'PENDING' | 'REJECTED' | 'NOT_FOUND';
   wallet?: string;
   tier?: string;
   allocation?: string;

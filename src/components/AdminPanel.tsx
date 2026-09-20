@@ -22,6 +22,15 @@ import {
 } from 'lucide-react';
 import { WhitelistSubmission, WhitelistWalletRecord, Task } from '../types.ts';
 import { INITIAL_WHITELISTED_WALLETS, DEFAULT_TASKS } from '../data/mockData.ts';
+import {
+  ADMIN_PASSWORD,
+  ADMIN_USERNAME,
+  ADMIN_WALLET_ADDRESS,
+  isSupabaseConfigured,
+  saveWalletToSupabase,
+  fetchWalletsFromSupabase,
+  fetchSubmissionsFromSupabase,
+} from '../utils/supabase.ts';
 
 interface AdminPanelProps {
   onBackToSite: () => void;
@@ -144,10 +153,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
     localStorage.setItem('bunink_submissions', JSON.stringify(submissions));
   }, [submissions]);
 
-  // Handle Admin Login
+  // Fetch live Supabase data on load if configured
+  useEffect(() => {
+    if (isAuthenticated && isSupabaseConfigured()) {
+      fetchWalletsFromSupabase().then((remoteWallets) => {
+        if (remoteWallets && Object.keys(remoteWallets).length > 0) {
+          setWallets((prev) => ({ ...prev, ...remoteWallets }));
+        }
+      });
+      fetchSubmissionsFromSupabase().then((remoteSubs) => {
+        if (remoteSubs && remoteSubs.length > 0) {
+          setSubmissions(remoteSubs);
+        }
+      });
+    }
+  }, [isAuthenticated]);
+
+  // Handle Admin Login (supports Vercel ADMIN_PASSWORD, ADMIN_WALLET_ADDRESS, bunink2026, or admin)
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === DEFAULT_ADMIN_PASS || passwordInput === 'admin') {
+    const cleanInput = passwordInput.trim();
+    const envPass = ADMIN_PASSWORD ? ADMIN_PASSWORD.trim() : '';
+
+    const isMatch =
+      (envPass && cleanInput === envPass) ||
+      cleanInput === DEFAULT_ADMIN_PASS ||
+      cleanInput === 'admin' ||
+      (ADMIN_WALLET_ADDRESS && cleanInput.toLowerCase() === ADMIN_WALLET_ADDRESS.toLowerCase());
+
+    if (isMatch) {
       setIsAuthenticated(true);
       sessionStorage.setItem('bunink_admin_auth', 'true');
       setAuthError(false);
@@ -408,8 +442,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast 
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-pixel text-xs sm:text-sm text-sky-400">BUNINK ADMIN PORTAL</span>
-                <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                  LIVE DB
+                <span
+                  className={`px-2 py-0.5 rounded text-[9px] font-mono border ${
+                    isSupabaseConfigured()
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                      : 'bg-sky-500/20 text-sky-300 border-sky-400/30'
+                  }`}
+                >
+                  {isSupabaseConfigured() ? 'SUPABASE CLOUD' : 'LOCAL CACHE'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-mono">Inkonchain Whitelist Management Console</p>

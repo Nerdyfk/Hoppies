@@ -8,6 +8,12 @@ import { Toast } from './components/Toast.tsx';
 import { AdminPanel } from './components/AdminPanel.tsx';
 import { Task, WhitelistApplication, WhitelistCheckResponse, WhitelistSubmission, ToastMessage } from './types.ts';
 import { DEFAULT_TASKS, INITIAL_WHITELISTED_WALLETS } from './data/mockData.ts';
+import {
+  isSupabaseConfigured,
+  saveSubmissionToSupabase,
+  saveWalletToSupabase,
+  checkWalletInSupabase,
+} from './utils/supabase.ts';
 
 export default function App() {
   const [currentRoute, setCurrentRoute] = useState<'home' | 'admin'>(() => {
@@ -267,7 +273,16 @@ export default function App() {
       newSubmission,
       ...existingSubmissions.filter((s) => s.walletAddress.toLowerCase() !== normalized),
     ];
-    localStorage.setItem('bunink_submissions', JSON.stringify(updatedSubmissions));
+    // Sync with Supabase Cloud Database if configured
+    if (isSupabaseConfigured()) {
+      saveSubmissionToSupabase(newSubmission);
+      saveWalletToSupabase(normalized, {
+        status: 'PENDING',
+        tier: 'Wave 1 Priority (Pending Review)',
+        allocation: 'Up to 2 NFTs (Subject to Review)',
+        submittedAt: new Date().toISOString(),
+      });
+    }
 
     // Try submitting to /api/whitelist/submit if endpoint exists
     try {
@@ -291,7 +306,7 @@ export default function App() {
   const handleCheckStatus = async (walletAddress: string): Promise<WhitelistCheckResponse> => {
     const normalized = walletAddress.trim().toLowerCase();
 
-    // 1. Check if user just submitted this
+    // 1. Check if user just submitted this in active session
     if (application && application.walletAddress.toLowerCase() === normalized) {
       return {
         found: true,
@@ -303,7 +318,26 @@ export default function App() {
       };
     }
 
-    // 2. Check local wallet store
+    // 2. Check Supabase Cloud Database in real-time if configured
+    if (isSupabaseConfigured()) {
+      try {
+        const remoteRecord = await checkWalletInSupabase(normalized);
+        if (remoteRecord) {
+          return {
+            found: true,
+            status: remoteRecord.status,
+            wallet: walletAddress,
+            tier: remoteRecord.tier,
+            allocation: remoteRecord.allocation,
+            submittedAt: remoteRecord.submittedAt,
+          };
+        }
+      } catch (err) {
+        console.warn('Supabase query fallback:', err);
+      }
+    }
+
+    // 3. Check local wallet store fallback
     let localWallets = INITIAL_WHITELISTED_WALLETS;
     const stored = localStorage.getItem('bunink_wallets');
     if (stored) {
