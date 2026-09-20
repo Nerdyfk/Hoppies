@@ -24,7 +24,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { WhitelistSubmission, WhitelistWalletRecord, Task } from '../types.ts';
-import { INITIAL_WHITELISTED_WALLETS, DEFAULT_TASKS } from '../data/mockData.ts';
+import { INITIAL_WHITELISTED_WALLETS, DEFAULT_TASKS, DEFAULT_INITIAL_SUBMISSIONS } from '../data/mockData.ts';
 import {
   ADMIN_PASSWORD,
   ADMIN_WALLET_ADDRESS,
@@ -35,6 +35,89 @@ import {
   saveTasksToSupabase,
   fetchTasksFromSupabase,
 } from '../utils/supabase.ts';
+
+// Helper to guarantee 100% two-way synchronization between Whitelist Database and User Applications
+export const reconcileCollections = (
+  rawWallets: Record<string, WhitelistWalletRecord>,
+  rawSubs: WhitelistSubmission[]
+): { wallets: Record<string, WhitelistWalletRecord>; submissions: WhitelistSubmission[] } => {
+  const syncdWallets: Record<string, WhitelistWalletRecord> = { ...rawWallets };
+  const syncdSubs: WhitelistSubmission[] = [...rawSubs];
+
+  // 1. Any wallet in syncdWallets that is missing from syncdSubs -> add synthetic auditable submission record
+  Object.entries(syncdWallets).forEach(([addr, rec]) => {
+    const lower = addr.toLowerCase();
+    const existingIdx = syncdSubs.findIndex((s) => s.walletAddress.toLowerCase() === lower);
+    if (existingIdx === -1) {
+      syncdSubs.push({
+        id: `sub-entry-${lower.slice(2, 10)}`,
+        walletAddress: lower,
+        submittedAt: rec.submittedAt || new Date().toISOString(),
+        status: rec.status,
+        tier: rec.tier,
+        allocation: rec.allocation,
+        proofs: [
+          { id: 'wallet-entry', title: 'Whitelist Registration', proof: 'Registered in Whitelist Database' },
+        ],
+      });
+    } else {
+      // Keep status, tier, allocation synced
+      if (
+        syncdSubs[existingIdx].status !== rec.status ||
+        syncdSubs[existingIdx].tier !== rec.tier ||
+        syncdSubs[existingIdx].allocation !== rec.allocation
+      ) {
+        syncdSubs[existingIdx] = {
+          ...syncdSubs[existingIdx],
+          status: rec.status,
+          tier: rec.tier,
+          allocation: rec.allocation,
+        };
+      }
+    }
+  });
+
+  // 2. Any submission in syncdSubs that is missing from syncdWallets -> add to syncdWallets
+  syncdSubs.forEach((sub) => {
+    const lower = sub.walletAddress.toLowerCase();
+    if (!syncdWallets[lower]) {
+      syncdWallets[lower] = {
+        status: sub.status === 'REJECTED' ? 'PENDING' : sub.status,
+        tier: sub.tier,
+        allocation: sub.allocation,
+        submittedAt: sub.submittedAt,
+      };
+    }
+  });
+
+  return { wallets: syncdWallets, submissions: syncdSubs };
+};
+
+const loadInitialAdminData = () => {
+  let baseWallets = INITIAL_WHITELISTED_WALLETS;
+  let baseSubs = DEFAULT_INITIAL_SUBMISSIONS;
+  if (typeof window !== 'undefined') {
+    const storedWallets = localStorage.getItem('bunink_wallets');
+    if (storedWallets) {
+      try {
+        const parsed = JSON.parse(storedWallets);
+        if (parsed && Object.keys(parsed).length > 0) {
+          baseWallets = { ...baseWallets, ...parsed };
+        }
+      } catch {}
+    }
+    const storedSubs = localStorage.getItem('bunink_submissions');
+    if (storedSubs) {
+      try {
+        const parsed = JSON.parse(storedSubs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          baseSubs = parsed;
+        }
+      } catch {}
+    }
+  }
+  return reconcileCollections(baseWallets, baseSubs);
+};
 
 interface AdminPanelProps {
   onBackToSite: () => void;
@@ -56,63 +139,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
   // Active tab
   const [activeTab, setActiveTab] = useState<'wallets' | 'submissions' | 'tasks'>('wallets');
 
-  // Wallets database state (ensures default initial wallets if local storage is empty)
-  const [wallets, setWallets] = useState<Record<string, WhitelistWalletRecord>>(() => {
-    let base = INITIAL_WHITELISTED_WALLETS;
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('bunink_wallets');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (parsed && Object.keys(parsed).length > 0) {
-            base = { ...base, ...parsed };
-          }
-        } catch {}
-      }
-    }
-    return base;
-  });
+  const initialData = useMemo(() => loadInitialAdminData(), []);
 
-  // Submissions state
-  const [submissions, setSubmissions] = useState<WhitelistSubmission[]>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('bunink_submissions');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
-        } catch {}
-      }
-    }
-    return [
-      {
-        id: 'sub-1',
-        walletAddress: '0x71c8413204c38ff240097621f37e42d713c72b22',
-        submittedAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-        status: 'WHITELISTED',
-        tier: 'Tier 1 Guaranteed (Wave 1)',
-        allocation: '2 NFTs',
-        proofs: [
-          { id: 'task-1-twitter', title: 'Follow @Bunnink0 on X / Twitter', proof: '@bunlover_alpha' },
-          { id: 'task-2-retweet', title: 'Like, Repost & Comment on Pinned Post', proof: 'https://x.com/bunlover_alpha/status/1834920' },
-        ],
-      },
-      {
-        id: 'sub-2',
-        walletAddress: '0x1234567890123456789012345678901234567890',
-        submittedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-        status: 'PENDING',
-        tier: 'Review Pending (Wave 2)',
-        allocation: '1 NFT',
-        proofs: [
-          { id: 'task-1-twitter', title: 'Follow @Bunnink0 on X / Twitter', proof: '@crypto_hops' },
-          { id: 'task-2-retweet', title: 'Like, Repost & Comment on Pinned Post', proof: 'Verified repost and comment @crypto_hops' },
-        ],
-      },
-    ];
-  });
+  // Wallets database state (guaranteed 1-to-1 sync with submissions)
+  const [wallets, setWallets] = useState<Record<string, WhitelistWalletRecord>>(initialData.wallets);
+
+  // Submissions state (guaranteed 1-to-1 sync with wallets)
+  const [submissions, setSubmissions] = useState<WhitelistSubmission[]>(initialData.submissions);
 
   // Tasks state
   const [tasks, setTasks] = useState<Task[]>(() => {
@@ -170,6 +203,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
     localStorage.setItem('bunink_submissions', JSON.stringify(submissions));
   }, [submissions]);
 
+  // Two-way synchronization effect: Ensure wallet count and application count are ALWAYS identical
+  useEffect(() => {
+    const syncd = reconcileCollections(wallets, submissions);
+    const subCountChanged = syncd.submissions.length !== submissions.length;
+    const walletCountChanged = Object.keys(syncd.wallets).length !== Object.keys(wallets).length;
+
+    if (subCountChanged || walletCountChanged) {
+      setSubmissions(syncd.submissions);
+      setWallets(syncd.wallets);
+      localStorage.setItem('bunink_wallets', JSON.stringify(syncd.wallets));
+      localStorage.setItem('bunink_submissions', JSON.stringify(syncd.submissions));
+    }
+  }, [wallets, submissions]);
+
   // Sync tasks to localStorage and App.tsx whenever updated
   const syncTasks = (newTasks: Task[]) => {
     setTasks(newTasks);
@@ -186,21 +233,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
   // Fetch live Supabase data on load if configured
   useEffect(() => {
     if (isAuthenticated && isSupabaseConfigured()) {
-      fetchWalletsFromSupabase().then((remoteWallets) => {
-        if (remoteWallets && Object.keys(remoteWallets).length > 0) {
-          setWallets((prev) => ({ ...prev, ...remoteWallets }));
-        }
-      });
-      fetchSubmissionsFromSupabase().then((remoteSubs) => {
-        if (remoteSubs && remoteSubs.length > 0) {
-          setSubmissions(remoteSubs);
-        }
-      });
-      fetchTasksFromSupabase().then((remoteTasks) => {
+      Promise.all([
+        fetchWalletsFromSupabase(),
+        fetchSubmissionsFromSupabase(),
+        fetchTasksFromSupabase(),
+      ]).then(([remoteWallets, remoteSubs, remoteTasks]) => {
         if (remoteTasks && remoteTasks.length > 0) {
           setTasks(remoteTasks);
           if (onTasksUpdated) onTasksUpdated(remoteTasks);
         }
+
+        setWallets((prevWallets) => {
+          const mergedWallets =
+            remoteWallets && Object.keys(remoteWallets).length > 0
+              ? { ...prevWallets, ...remoteWallets }
+              : prevWallets;
+
+          setSubmissions((prevSubs) => {
+            let mergedSubs = prevSubs;
+            if (remoteSubs && remoteSubs.length > 0) {
+              const remoteMap = new Map(remoteSubs.map((s) => [s.walletAddress.toLowerCase(), s]));
+              const combined = [...remoteSubs];
+              prevSubs.forEach((ps) => {
+                if (!remoteMap.has(ps.walletAddress.toLowerCase())) {
+                  combined.push(ps);
+                }
+              });
+              mergedSubs = combined;
+            }
+
+            const synced = reconcileCollections(mergedWallets, mergedSubs);
+            localStorage.setItem('bunink_wallets', JSON.stringify(synced.wallets));
+            localStorage.setItem('bunink_submissions', JSON.stringify(synced.submissions));
+            return synced.submissions;
+          });
+
+          return mergedWallets;
+        });
       });
     }
   }, [isAuthenticated]);
@@ -284,6 +353,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
       [cleanAddress]: newRecord,
     }));
 
+    setSubmissions((prev) => [
+      {
+        id: `sub-${Date.now()}`,
+        walletAddress: cleanAddress,
+        submittedAt: new Date().toISOString(),
+        status: 'WHITELISTED',
+        tier: newWalletTier,
+        allocation: newWalletAllocation,
+        proofs: [{ id: 'admin-grant', title: 'Admin Whitelist Registration', proof: 'Registered directly by admin' }],
+      },
+      ...prev.filter((s) => s.walletAddress.toLowerCase() !== cleanAddress),
+    ]);
+
     if (isSupabaseConfigured()) {
       saveWalletToSupabase(cleanAddress, newRecord);
     }
@@ -304,6 +386,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
       return;
     }
 
+    const now = new Date().toISOString();
     setWallets((prev) => {
       const updated = { ...prev };
       validAddresses.forEach((addr) => {
@@ -311,7 +394,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
           status: 'WHITELISTED',
           tier: bulkTier,
           allocation: bulkAllocation,
-          submittedAt: new Date().toISOString(),
+          submittedAt: now,
         };
         updated[addr] = record;
         if (isSupabaseConfigured()) {
@@ -319,6 +402,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
         }
       });
       return updated;
+    });
+
+    setSubmissions((prev) => {
+      const existingMap = new Set(prev.map((s) => s.walletAddress.toLowerCase()));
+      const newSubs: WhitelistSubmission[] = validAddresses
+        .filter((addr) => !existingMap.has(addr))
+        .map((addr, idx) => ({
+          id: `sub-bulk-${Date.now()}-${idx}`,
+          walletAddress: addr,
+          submittedAt: now,
+          status: 'WHITELISTED',
+          tier: bulkTier,
+          allocation: bulkAllocation,
+          proofs: [{ id: 'bulk-import', title: 'Bulk Whitelist Import', proof: 'Imported via Admin Panel' }],
+        }));
+      return [...newSubs, ...prev];
     });
 
     setBulkInput('');
@@ -329,11 +428,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
   // Delete wallet from database
   const handleDeleteWallet = (address: string) => {
     if (!confirm(`Remove ${address} from whitelist database?`)) return;
+    const lower = address.toLowerCase();
     setWallets((prev) => {
       const updated = { ...prev };
-      delete updated[address.toLowerCase()];
+      delete updated[lower];
       return updated;
     });
+    setSubmissions((prev) => prev.filter((s) => s.walletAddress.toLowerCase() !== lower));
     showToast('info', `Removed ${address.slice(0, 6)}...`);
   };
 
@@ -404,11 +505,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
 
   // Delete Submission
   const handleDeleteSubmission = (id: string) => {
+    const target = submissions.find((s) => s.id === id);
     setSubmissions((prev) => prev.filter((s) => s.id !== id));
+    if (target) {
+      setWallets((prev) => {
+        const updated = { ...prev };
+        delete updated[target.walletAddress.toLowerCase()];
+        return updated;
+      });
+    }
     if (auditSubmission?.id === id) {
       setAuditSubmission(null);
     }
-    showToast('info', 'Submission deleted.');
+    showToast('info', 'Submission deleted from applications and whitelist.');
   };
 
   // Copy helper
@@ -455,8 +564,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBackToSite, showToast,
   const handleResetDatabase = () => {
     if (!confirm('Reset database to default seed wallets?')) return;
     setWallets(INITIAL_WHITELISTED_WALLETS);
-    localStorage.removeItem('bunink_wallets');
-    showToast('info', 'Database reset to default.');
+    setSubmissions(DEFAULT_INITIAL_SUBMISSIONS);
+    localStorage.setItem('bunink_wallets', JSON.stringify(INITIAL_WHITELISTED_WALLETS));
+    localStorage.setItem('bunink_submissions', JSON.stringify(DEFAULT_INITIAL_SUBMISSIONS));
+    showToast('info', 'Database reset to default 2 seed entries.');
   };
 
   // ===================== TASK / QUEST CRUD HANDLERS =====================

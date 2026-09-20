@@ -7,7 +7,7 @@ import { Footer } from './components/Footer.tsx';
 import { Toast } from './components/Toast.tsx';
 import { AdminPanel } from './components/AdminPanel.tsx';
 import { Task, WhitelistApplication, WhitelistCheckResponse, WhitelistSubmission, ToastMessage } from './types.ts';
-import { DEFAULT_TASKS, INITIAL_WHITELISTED_WALLETS } from './data/mockData.ts';
+import { DEFAULT_TASKS, INITIAL_WHITELISTED_WALLETS, DEFAULT_INITIAL_SUBMISSIONS } from './data/mockData.ts';
 import {
   isSupabaseConfigured,
   saveSubmissionToSupabase,
@@ -253,11 +253,14 @@ export default function App() {
     localStorage.setItem('bunink_wallets', JSON.stringify(currentWallets));
 
     // Record in bunink_submissions for Admin Panel review with task proofs
-    let existingSubmissions: WhitelistSubmission[] = [];
+    let existingSubmissions: WhitelistSubmission[] = DEFAULT_INITIAL_SUBMISSIONS;
     const storedSubs = localStorage.getItem('bunink_submissions');
     if (storedSubs) {
       try {
-        existingSubmissions = JSON.parse(storedSubs);
+        const parsed = JSON.parse(storedSubs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          existingSubmissions = parsed;
+        }
       } catch {}
     }
     const newSubmission: WhitelistSubmission = {
@@ -273,6 +276,7 @@ export default function App() {
       newSubmission,
       ...existingSubmissions.filter((s) => s.walletAddress.toLowerCase() !== normalized),
     ];
+    localStorage.setItem('bunink_submissions', JSON.stringify(updatedSubmissions));
     // Sync with Supabase Cloud Database if configured
     if (isSupabaseConfigured()) {
       saveSubmissionToSupabase(newSubmission);
