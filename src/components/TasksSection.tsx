@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wallet, Check, CheckCircle2, Copy, AlertCircle } from 'lucide-react';
+import { Wallet, Check, CheckCircle2, Copy, AlertCircle, ExternalLink } from 'lucide-react';
 import { Task, WhitelistApplication } from '../types.ts';
 import { triggerWhitelistConfetti } from '../utils/confetti.ts';
 
@@ -19,28 +19,35 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
   application,
   showToast,
 }) => {
-  const task1 = tasks[0];
-  const task2 = tasks[1];
+  // Only display active tasks
+  const activeTasks = tasks.filter((t) => t.active !== false);
 
-  const [followProof, setFollowProof] = useState(task1?.userProof || '');
-  const [commentProof, setCommentProof] = useState(task2?.userProof || '');
+  // Maintain proof inputs by task id
+  const [proofs, setProofs] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    tasks.forEach((t) => {
+      if (t.userProof) initial[t.id] = t.userProof;
+    });
+    return initial;
+  });
+
   const [walletInput, setWalletInput] = useState(application?.walletAddress || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [copiedPass, setCopiedPass] = useState(false);
-  const [errors, setErrors] = useState<{ follow?: string; comment?: string; wallet?: string }>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Synchronize inputs if external tasks or application change
+  // Synchronize proofs when tasks prop changes
   useEffect(() => {
-    if (task1?.userProof && !followProof) {
-      setFollowProof(task1.userProof);
-    }
-  }, [task1?.userProof]);
-
-  useEffect(() => {
-    if (task2?.userProof && !commentProof) {
-      setCommentProof(task2.userProof);
-    }
-  }, [task2?.userProof]);
+    setProofs((prev) => {
+      const updated = { ...prev };
+      tasks.forEach((t) => {
+        if (t.userProof && !updated[t.id]) {
+          updated[t.id] = t.userProof;
+        }
+      });
+      return updated;
+    });
+  }, [tasks]);
 
   useEffect(() => {
     if (application?.walletAddress && !walletInput) {
@@ -53,26 +60,40 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
     return evmRegex.test(addr.trim());
   };
 
+  const handleProofChange = (taskId: string, value: string) => {
+    setProofs((prev) => ({ ...prev, [taskId]: value }));
+    if (errors[taskId]) {
+      setErrors((prev) => {
+        const copy = { ...prev };
+        delete copy[taskId];
+        return copy;
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { follow?: string; comment?: string; wallet?: string } = {};
-
-    const cleanFollow = followProof.trim();
-    const cleanComment = commentProof.trim();
+    const newErrors: Record<string, string> = {};
     const cleanWallet = walletInput.trim();
 
-    if (!cleanFollow) {
-      newErrors.follow = 'Please enter your username or profile link';
-    }
-
-    if (!cleanComment) {
-      newErrors.comment = 'Please enter your comment or status link';
-    }
+    // Validate required tasks
+    activeTasks.forEach((task) => {
+      const val = (proofs[task.id] || '').trim();
+      if (task.required && !val) {
+        if (task.type === 'follow_twitter' || task.id.includes('twitter')) {
+          newErrors[task.id] = 'Please enter your username or profile link';
+        } else if (task.type === 'retweet' || task.id.includes('retweet')) {
+          newErrors[task.id] = 'Please enter your comment or status link';
+        } else {
+          newErrors[task.id] = 'Please provide verification proof for this quest';
+        }
+      }
+    });
 
     if (!cleanWallet) {
-      newErrors.wallet = 'Please enter your EVM wallet address';
+      newErrors['wallet'] = 'Please enter your EVM wallet address';
     } else if (!validateAddress(cleanWallet)) {
-      newErrors.wallet = 'Invalid EVM address (must be 0x followed by 40 hex characters)';
+      newErrors['wallet'] = 'Invalid EVM address (must be 0x followed by 40 hex characters)';
     }
 
     setErrors(newErrors);
@@ -85,10 +106,15 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
     setIsSubmitting(true);
     try {
       // Save proofs to tasks
-      if (task1) onCompleteTask(task1.id, cleanFollow);
-      if (task2) onCompleteTask(task2.id, cleanComment);
+      activeTasks.forEach((t) => {
+        const val = (proofs[t.id] || '').trim();
+        if (val) {
+          onCompleteTask(t.id, val);
+        }
+      });
 
-      const success = await onSubmitApplication(cleanWallet, cleanFollow);
+      const firstProof = proofs[activeTasks[0]?.id]?.trim() || '';
+      const success = await onSubmitApplication(cleanWallet, firstProof);
       if (success) {
         triggerWhitelistConfetti();
         showToast('success', 'Whitelist application submitted successfully!');
@@ -173,7 +199,7 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                 <div className="p-3 rounded-xl bg-[#181d2a] border border-[#262e40]">
                   <span className="text-slate-400 text-[11px] block">X Handle / Proof</span>
                   <span className="text-sky-300 font-semibold truncate block mt-0.5">
-                    {application.xHandle || followProof || 'Verified'}
+                    {application.xHandle || proofs[activeTasks[0]?.id] || 'Verified'}
                   </span>
                 </div>
                 <div className="p-3 rounded-xl bg-[#181d2a] border border-[#262e40]">
@@ -194,110 +220,106 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
             </div>
           </div>
         ) : (
-          /* Form with the 3 Quest Cards */
+          /* Form with Dynamic Active Quest Cards */
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
-            {/* CARD 1: Follow on X */}
-            <div className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]">
-              <div className="flex items-start gap-4">
-                {/* Icon Box */}
-                <div className="w-12 h-12 rounded-xl bg-[#1d2332] border border-[#2e374d] flex items-center justify-center shrink-0 text-white">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.254 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
-                  </svg>
-                </div>
+            {activeTasks.map((task) => {
+              const isTwitter =
+                task.type === 'follow_twitter' ||
+                task.type === 'retweet' ||
+                task.id.includes('twitter') ||
+                task.id.includes('retweet') ||
+                (task.action_url &&
+                  (task.action_url.includes('x.com') || task.action_url.includes('twitter.com')));
 
-                {/* Content Header */}
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="font-pixel text-[11px] sm:text-[12px] leading-relaxed tracking-wide">
-                    <span className="text-white">FOLLOW </span>
-                    <a
-                      href="https://x.com/Bunnink0"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#38BDF8] hover:underline cursor-pointer"
-                      title="Follow @Bunnink0 on X"
-                    >
-                      @BUNNINK0
-                    </a>
+              const linkUrl = task.action_url || 'https://x.com/Bunnink0';
+              const proofVal = proofs[task.id] || '';
+              const errorMsg = errors[task.id];
+
+              return (
+                <div
+                  key={task.id}
+                  className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]"
+                >
+                  <div className="flex items-start gap-4">
+                    {/* Icon Box */}
+                    <div className="w-12 h-12 rounded-xl bg-[#1d2332] border border-[#2e374d] flex items-center justify-center shrink-0 text-white">
+                      {isTwitter ? (
+                        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.254 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
+                        </svg>
+                      ) : (
+                        <ExternalLink className="w-5 h-5 text-sky-400" />
+                      )}
+                    </div>
+
+                    {/* Content Header */}
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <div className="font-pixel text-[11px] sm:text-[12px] leading-relaxed tracking-wide">
+                        <a
+                          href={linkUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#38BDF8] underline underline-offset-4 decoration-[#38BDF8] hover:opacity-90 cursor-pointer inline-flex items-center gap-1.5 break-words"
+                          title={`Open quest link: ${linkUrl}`}
+                        >
+                          <span>{task.title.toUpperCase()}</span>
+                          <ExternalLink className="w-3 h-3 shrink-0 inline text-[#38BDF8]" />
+                        </a>
+                      </div>
+
+                      {task.description && (
+                        <p className="text-xs text-slate-400 font-mono mt-1.5 leading-relaxed">
+                          {task.description}
+                        </p>
+                      )}
+
+                      <div className="mt-2.5 flex items-center gap-2">
+                        {task.required ? (
+                          <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-[#0b1c2d] border border-sky-600/60 text-[#38BDF8] uppercase inline-block">
+                            REQUIRED
+                          </span>
+                        ) : (
+                          <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700 text-slate-400 uppercase inline-block">
+                            OPTIONAL
+                          </span>
+                        )}
+                        <a
+                          href={linkUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-sky-400/80 hover:text-sky-300 font-mono inline-flex items-center gap-1 hover:underline"
+                        >
+                          <span>Open Link</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="mt-2.5">
-                    <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-[#0b1c2d] border border-sky-600/60 text-[#38BDF8] uppercase inline-block">
-                      REQUIRED
-                    </span>
+                  {/* Input Field */}
+                  <div className="mt-4 sm:mt-5">
+                    <input
+                      type="text"
+                      value={proofVal}
+                      onChange={(e) => handleProofChange(task.id, e.target.value)}
+                      placeholder={
+                        task.type === 'follow_twitter' || task.id.includes('twitter')
+                          ? '@yourusername (or profile link)'
+                          : task.type === 'retweet' || task.id.includes('retweet')
+                          ? 'https://x.com/.../status/... (comment link)'
+                          : 'Enter proof (URL or handle)'
+                      }
+                      className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
+                    />
+                    {errorMsg && (
+                      <p className="font-pixel text-[8px] text-rose-400 mt-2">{errorMsg}</p>
+                    )}
                   </div>
                 </div>
-              </div>
+              );
+            })}
 
-              {/* Input Field */}
-              <div className="mt-4 sm:mt-5">
-                <input
-                  type="text"
-                  value={followProof}
-                  onChange={(e) => {
-                    setFollowProof(e.target.value);
-                    if (errors.follow) setErrors((prev) => ({ ...prev, follow: undefined }));
-                  }}
-                  placeholder="@yourusername (or profile link)"
-                  className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
-                />
-                {errors.follow && (
-                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors.follow}</p>
-                )}
-              </div>
-            </div>
-
-            {/* CARD 2: Like, Repost & Comment on Pinned Post */}
-            <div className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]">
-              <div className="flex items-start gap-4">
-                {/* Icon Box */}
-                <div className="w-12 h-12 rounded-xl bg-[#1d2332] border border-[#2e374d] flex items-center justify-center shrink-0 text-white">
-                  <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
-                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.73-8.835L1.254 2.25H8.08l4.254 5.622L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z" />
-                  </svg>
-                </div>
-
-                {/* Content Header */}
-                <div className="flex-1 min-w-0 pt-0.5">
-                  <div className="font-pixel text-[11px] sm:text-[12px] leading-relaxed tracking-wide">
-                    <a
-                      href="https://x.com/Bunnink0"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[#38BDF8] underline underline-offset-4 decoration-[#38BDF8] hover:opacity-90 cursor-pointer block"
-                      title="Open pinned post on X"
-                    >
-                      LIKE, REPOST & COMMENT ON PINNED POST
-                    </a>
-                  </div>
-
-                  <div className="mt-2.5">
-                    <span className="font-pixel text-[9px] px-2.5 py-1 rounded bg-[#0b1c2d] border border-sky-600/60 text-[#38BDF8] uppercase inline-block">
-                      REQUIRED
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Input Field */}
-              <div className="mt-4 sm:mt-5">
-                <input
-                  type="text"
-                  value={commentProof}
-                  onChange={(e) => {
-                    setCommentProof(e.target.value);
-                    if (errors.comment) setErrors((prev) => ({ ...prev, comment: undefined }));
-                  }}
-                  placeholder="https://x.com/.../status/... (comment link)"
-                  className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
-                />
-                {errors.comment && (
-                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors.comment}</p>
-                )}
-              </div>
-            </div>
-
-            {/* CARD 3: Submit EVM Wallet Address */}
+            {/* Wallet Address Card */}
             <div className="rounded-2xl bg-[#141822] border border-[#232a3b] p-5 sm:p-6 transition-all hover:border-[#323c52]">
               <div className="flex items-center gap-4">
                 {/* Icon Box */}
@@ -323,13 +345,19 @@ export const TasksSection: React.FC<TasksSectionProps> = ({
                   value={walletInput}
                   onChange={(e) => {
                     setWalletInput(e.target.value);
-                    if (errors.wallet) setErrors((prev) => ({ ...prev, wallet: undefined }));
+                    if (errors['wallet']) {
+                      setErrors((prev) => {
+                        const copy = { ...prev };
+                        delete copy['wallet'];
+                        return copy;
+                      });
+                    }
                   }}
                   placeholder="0x1234567890abcdef1234567890abcdef12345678"
                   className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl bg-[#10131b] border border-sky-700/60 focus:border-[#38BDF8] text-white placeholder:text-[#52647d] font-pixel text-[10px] sm:text-[11px] outline-none shadow-[0_0_12px_rgba(56,189,248,0.12)] focus:shadow-[0_0_16px_rgba(56,189,248,0.25)] transition-all"
                 />
-                {errors.wallet && (
-                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors.wallet}</p>
+                {errors['wallet'] && (
+                  <p className="font-pixel text-[8px] text-rose-400 mt-2">{errors['wallet']}</p>
                 )}
               </div>
             </div>

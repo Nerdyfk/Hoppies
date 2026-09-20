@@ -13,6 +13,7 @@ import {
   saveSubmissionToSupabase,
   saveWalletToSupabase,
   checkWalletInSupabase,
+  fetchTasksFromSupabase,
 } from './utils/supabase.ts';
 
 export default function App() {
@@ -32,6 +33,15 @@ export default function App() {
       if (path === '/admin' || path.startsWith('/admin') || window.location.hash === '#admin') {
         setCurrentRoute('admin');
       } else {
+        const stored = localStorage.getItem('bunink_tasks_config') || localStorage.getItem('bunink_tasks');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setTasks(parsed);
+            }
+          } catch {}
+        }
         setCurrentRoute('home');
       }
     };
@@ -55,6 +65,15 @@ export default function App() {
   const navigateToHome = () => {
     if (typeof window !== 'undefined') {
       window.history.pushState(null, '', '/');
+      const stored = localStorage.getItem('bunink_tasks_config') || localStorage.getItem('bunink_tasks');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTasks(parsed);
+          }
+        } catch {}
+      }
       setCurrentRoute('home');
       window.scrollTo(0, 0);
     }
@@ -163,8 +182,25 @@ export default function App() {
     }
   }, [toast, closeToast]);
 
-  // Attempt to fetch fresh tasks from /api/tasks if running in fullstack mode
+  // Attempt to fetch fresh tasks from Supabase or /api/tasks and listen for storage updates
   useEffect(() => {
+    if (isSupabaseConfigured()) {
+      fetchTasksFromSupabase().then((remoteTasks) => {
+        if (remoteTasks && remoteTasks.length > 0) {
+          setTasks((currentTasks) => {
+            return remoteTasks.map((remoteTask: Task) => {
+              const existing = currentTasks.find((t) => t.id === remoteTask.id);
+              return {
+                ...remoteTask,
+                isCompleted: existing ? existing.isCompleted : false,
+                userProof: existing ? existing.userProof : undefined,
+              };
+            });
+          });
+        }
+      });
+    }
+
     const fetchTasks = async () => {
       try {
         const res = await fetch('/api/tasks');
@@ -190,6 +226,19 @@ export default function App() {
     };
 
     fetchTasks();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if ((e.key === 'bunink_tasks' || e.key === 'bunink_tasks_config') && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTasks(parsed);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   // Save tasks to localStorage - requires actual typed proof
